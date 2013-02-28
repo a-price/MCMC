@@ -1,0 +1,7 @@
+9	# windowSize 
+5.0	# spatialStdev 
+3.0	# disparityStdev
+300	# weightThreshold
+1.0 # colorFactor
+1.0 # disparityFactor
+1.0	# distanceFactor
