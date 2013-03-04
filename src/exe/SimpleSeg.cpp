@@ -325,6 +325,11 @@ void onMouse(int event, int x, int y, int flags, void* param)
     	// Recolor image
     	repaintSuperPixel(graph, overSegmented, sID, currentS);
     	cv::imshow("Result", overSegmented);
+    	
+    	std::map<SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(sID);
+    	Plane p(superPixelIt->second->A_,superPixelIt->second->b_);
+		gtsam::Vector local = disparityToExplicit(p.density_.mean());
+		std::cout << "Local Plane Parameters: " << local.matrix() << std::endl;
     }
     else if (event == CV_EVENT_RBUTTONDOWN)
     {
