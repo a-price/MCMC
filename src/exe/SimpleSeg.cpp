@@ -91,8 +91,18 @@ void callback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageCo
 
 int main(int argc, char** argv)
 {
+	cv::Mat disparities, colors, depth3;
+	disparities = *(disparityImage(cv::imread("/home/arprice/workspace/eclipseMCMC/depth1.png")));
+	colors = cv::imread("/home/arprice/workspace/eclipseMCMC/color1.png");
+	depth3 = cv::imread("/home/arprice/workspace/eclipseMCMC/depth1.png");
+
 	ros::Time::init();
 	//ros::init(argc, argv, "simple_segment");
+	cv::imshow("c", colors);
+	cv::imshow("d", disparities);
+	//cv::waitKey(0);
+	segment(disparities, colors, *(new pcl::PointCloud<pcl::PointXYZRGB>), depth3);
+	return 0;
 
 
 	// Open Bagfile
@@ -118,7 +128,7 @@ int main(int argc, char** argv)
 	tSync.init();
 	tSync.setName("mySync");
 
-	cv::Mat disparities, colors, depth3;
+
 	pcl::PointCloud<pcl::PointXYZRGB> pCloud;
 	int state = 0;
 	int counter = 0;
@@ -170,7 +180,7 @@ int main(int argc, char** argv)
 			std::cout << "New full set. \n";
 			counter++;
 
-			if (counter >= 5)
+			if (counter >= 8)
 			{
 				counter = 0;
 				cv::waitKey(0);
@@ -201,7 +211,7 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZRGB> pCloud, cv:
 	size_t window = params.windowSize_;
 
 	std::cout << "checkpoint 1.\n";
-	for(int i = 0; i < 2; i++)
+	for(int i = 0; i < 3; i++)
 	{
 		cv::bilateralFilter(colors, filtc, window, window*2, window/2);
 		filtc.copyTo(colors);
@@ -212,7 +222,7 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZRGB> pCloud, cv:
 		cv::bilateralFilter(cd, filtcd, window, window*2, window);
 		filtcd.copyTo(cd);
 	}
-	system("mkdir -p ./temp/superPixels/");
+	int res = system("mkdir -p ./temp/superPixels/");
 	cv::imwrite("./temp/superPixels/colorf.png", colors);
 	cv::imwrite("./temp/superPixels/depthf.png", cd);
 
@@ -238,10 +248,10 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZRGB> pCloud, cv:
 	for (iter = graph.superPixels_.begin(); iter != graph.superPixels_.end(); ++iter)
 	{
 		count++;
-		mapping << ((long unsigned int)(iter->first));
-		mapping << ("->\n");
-		mapping << iter->second->A_->matrix();//((long unsigned int)(iter->second->id_));
-		mapping << ("\n");
+		//mapping << ((long unsigned int)(iter->first));
+		//mapping << ("->\n");
+		//mapping << iter->second->A_->matrix();//((long unsigned int)(iter->second->id_));
+		//mapping << ("\n");
 
 		// Get ID
 		idName = std::to_string((long unsigned int)(iter->first));
@@ -256,17 +266,18 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZRGB> pCloud, cv:
 				cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
 
 	}
+	std::cout << "SuperPixels: " << count << std::endl;
 	*/
 
 	cv::namedWindow("Result");
 	cv::setMouseCallback("Result", onMouse, 0);
 	cv::imshow("Result", overSegmented);
 
-	std::cout << "SuperPixels: " << count << std::endl;
+	cv::waitKey(0);
 
-	std::ofstream outfile;
-	outfile.open("./temp/superPixels/mapping.txt");
-	outfile << mapping.str();
+	//std::ofstream outfile;
+	//outfile.open("./temp/superPixels/mapping.txt");
+	//outfile << mapping.str();
 
 	//FILE* pFile = fopen("mapping.txt", "w");
 	//fprintf(pFile, "%s", mapping.str().c_str());
@@ -293,17 +304,14 @@ void createLookup(const Graph& graph, Eigen::MatrixXf& lookup)
 
 void repaintSuperPixel(const Graph& graph, cv::Mat& segmentedImage, SuperPixelID id, int segID)
 {
-	std::cout << "Redrawing...\n";
-	// Set the superpixel index for each pixel
+	// Find the superpixel index for each pixel
 	std::map <SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(id);//.begin();
-	//for(; superPixelIt != graph.superPixels_.end(); superPixelIt++)
+
+	// Set the colors for the pixels
+	for(size_t pixelIdx = 0; pixelIdx < superPixelIt->second->A_->rows(); pixelIdx++)
 	{
-		// Set the colors for the pixels
-		for(size_t pixelIdx = 0; pixelIdx < superPixelIt->second->A_->rows(); pixelIdx++)
-		{
-			size_t u = (*superPixelIt->second->A_)(pixelIdx, 0), v = (*superPixelIt->second->A_)(pixelIdx, 1);
-			segmentedImage.at<cv::Vec3b>(v,u) = segColors[segID];
-		}
+		size_t u = (*superPixelIt->second->A_)(pixelIdx, 0), v = (*superPixelIt->second->A_)(pixelIdx, 1);
+		segmentedImage.at<cv::Vec3b>(v,u) = segColors[segID];
 	}
 
 }
@@ -327,9 +335,11 @@ void onMouse(int event, int x, int y, int flags, void* param)
     	cv::imshow("Result", overSegmented);
     	
     	std::map<SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(sID);
-    	Plane p(superPixelIt->second->A_,superPixelIt->second->b_);
+    	Plane p(*(superPixelIt->second->A_),*(superPixelIt->second->b_));
 		gtsam::Vector local = disparityToExplicit(p.density_.mean());
-		std::cout << "Local Plane Parameters: " << local.matrix() << std::endl;
+		gtsam::Vector original = (superPixelIt->second->plane_->density_.mean());
+		std::cout << "Local Plane Parameters: " << local.matrix().transpose() << std::endl;
+		std::cout << "Plane Parameters Disparity: " << original.matrix().transpose() << std::endl;
     }
     else if (event == CV_EVENT_RBUTTONDOWN)
     {

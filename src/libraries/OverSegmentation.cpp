@@ -409,8 +409,8 @@ bool OverSegmentation::isLinear (const Matrix& matrix) {
 		
 		// Check if they are different
 	//	cout << "diffs: " << fabs(matrix(row_idx,0)-u0) << " " << fabs(matrix(row_idx,1)-v0) << endl;
-		if(fabs(matrix(row_idx,0)-u0) >= 0.5) foundDiffUs = true;
-		if(fabs(matrix(row_idx,1)-v0) >= 0.5) foundDiffVs = true;
+		if(fabs((double)matrix(row_idx,0)-u0) >= 0.5) foundDiffUs = true;
+		if(fabs((double)matrix(row_idx,1)-v0) >= 0.5) foundDiffVs = true;
 
 		// If both different u and v values are found, the superpixel is
 		// guaranteed not to be horizontal or vertical

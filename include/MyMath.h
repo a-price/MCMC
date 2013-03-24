@@ -94,7 +94,7 @@ static cv::Mat* disparityImage (const cv::Mat& disparities) {
 static gtsam::Vector disparityToExplicit (gtsam::Vector v) {
 
 	double f = kFocalLength;
-	double N = sqrt(v(0)*v(0) + v(1)*v(1) + ((v(2)/f) * (v(2)/f)));
+	double N = sqrt((double)(v(0)*v(0) + v(1)*v(1) + ((v(2)/f) * (v(2)/f))));
 	double a = v(0) / N;
 	double b = v(1) / N;
 	double c = v(2) / (f*N);
@@ -162,6 +162,7 @@ struct Plane {
 	/// The constructor
 	Plane (const gtsam::Matrix& A, const gtsam::Vector& b) {
 		density_ = solve(A, b, &error_);
+		std::cout << density_.mean()[2];
 	} 
  
 	/// Copy construction
