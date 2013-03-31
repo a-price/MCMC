@@ -1,0 +1,7 @@
+<launch>
+	<param name="use_sim_time" value="true" />
+
+	<node pkg="rosbag" type="play" name="rosbag" args="/media/Data/RGBD-Datasets/Freiburg/rgbd_dataset_freiburg3_cabinet-2hz-with-pointclouds.bag"/>
+	<node pkg="MCMC" type="SimpleSeg" name="simple_seg" output="screen"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find MCMC)/launch/simple_seg.vcg" />
+</launch>

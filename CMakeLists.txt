@@ -32,7 +32,7 @@ link_libraries(${OpenCV_LIBS})
 find_package(PCL REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
-link_libraries(${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
+link_libraries(${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FILTERS_LIBRARIES} )
 add_definitions(${PCL_DEFINITIONS})
 message("Found PCL:" ${PCL_INCLUDE_DIRS})
 
@@ -65,11 +65,6 @@ link_libraries(${CPPUNIT_LIBRARIES})
 # Include the project files
 include_directories(include)
 
-# Include the Hubo_Tech components
-#include_directories(modules/hubo-motion-rt/include)
-#include_directories(modules/hubo-ach/include)
-
-  
 # Collect the source, script and test files
 file(GLOB lib_source "src/libraries/*.cpp")
 LIST(SORT lib_source)
