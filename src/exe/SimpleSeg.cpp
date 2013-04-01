@@ -245,13 +245,12 @@ void segment(cv::Mat d, cv::Mat c,
 	ROS_INFO("Generated Lookup.");
 
 	pcl::PointCloud<pcl::PointXYZRGB> outCloud;
-	//outCloud.height = pCloud->height;
-	//outCloud.width = pCloud->width;
 	std::map<SuperPixelID, SuperPixel*>::iterator iter;
 	std::string idName;
-	int count = 0;
+	int count = 0, validCount = 0;
 
 	visualization_msgs::MarkerArray mArray;
+	Eigen::MatrixXf Theta = Eigen::MatrixXf::Zero(4, graph.superPixels_.size());
 
 	ROS_INFO("Got SPs.");
 	for (iter = graph.superPixels_.begin(); iter != graph.superPixels_.end(); ++iter)
@@ -305,9 +304,16 @@ void segment(cv::Mat d, cv::Mat c,
 		ransac.setDistanceThreshold (.01);
 		ransac.computeModel();
 		ransac.getModelCoefficients(fitPlane);
+		//ransac.getInliers()
+
 		if (fitPlane[0] != fitPlane[0]) {continue;}
+		if (fabs(fitPlane[0]) < 0.001) {continue;}
 		if (fitPlane[3] < -0.5) {fitPlane = -fitPlane;}
+
+		Theta.col(validCount) = fitPlane;
+		validCount++;
 		ROS_DEBUG_STREAM("Got parameters: " << fitPlane.matrix().transpose());
+
 
 		//int u = (int)(*(iter->second->A_))((int)(len/2),0);
 		//int v = (int)(*(iter->second->A_))((int)(len/2),1);
@@ -350,6 +356,21 @@ void segment(cv::Mat d, cv::Mat c,
 		marker.color.b = 0.0;
 		mArray.markers.push_back(marker);
 	}
+
+	// Trim Theta
+	Theta.conservativeResize(4, validCount);
+	ROS_INFO_STREAM("Theta: \n" << Theta.matrix());
+
+	// Save distances
+	Eigen::MatrixXf distances = Theta.row(3);
+	// Transform Vectors
+	Theta.row(3) = Eigen::MatrixXf::Ones(1, validCount);
+	Eigen::MatrixXf ThetaG = Eigen::MatrixXf::Zero(4, validCount);
+	//ROS_INFO("%li, %li, %li", ThetaG.rows(), cameraPose.matrix().rows(), Theta.rows());
+	ROS_INFO_STREAM(cameraPose.matrix());
+	ThetaG = cameraPose.matrix().cast<float>() * Theta;
+	//ThetaG.row(3) = distances;
+	ROS_INFO_STREAM("Theta Global: \n" << ThetaG.matrix());
 
 	ROS_INFO("Ready to publish.");
 	sensor_msgs::PointCloud2 msgCloud;
