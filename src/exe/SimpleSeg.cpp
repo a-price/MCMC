@@ -17,6 +17,9 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include <tf/transform_listener.h>
+#include <tf/transform_broadcaster.h>
+
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -24,7 +27,7 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
+//#include <opencv2/highgui/highgui.hpp>
 
 #include <pcl/ros/conversions.h>
 #include <pcl/common/centroid.h>
@@ -33,10 +36,11 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
-//#include <pcl/io/file_io.h>
 
 // Segmentation includes...
-
+#include "InteractiveSegmenter.h"
+#include "SegmentationContext.h"
+/*
 #include "Common.h"
 #include "Graph.h"
 #include "IO.h"
@@ -46,6 +50,8 @@
 #include <gtsam/geometry/Point2.h>
 
 #include <map>
+*/
+#include "tf_eigen.h"
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -56,33 +62,26 @@ const std::string colorTopic = "/camera/rgb/image_color";
 const std::string depthTopic = "/camera/depth/image";
 const std::string pointTopic = "/camera/rgb/points";
 
-// Global superpixel lookup by u,v index
-Graph graph;
-cv::Mat overSegmented;
-Eigen::MatrixXf spLookup;
-std::map<SuperPixelID, int> SPtoS;
-std::vector<SuperPixelID> StoSP[4];
-//std::map<int, SuperPixelID> StoSP;
-
-// Currently selected S
-int currentS = 0;
-// Colors
-const cv::Vec3b segColors[4] = {cv::Vec3b(255,0,0),cv::Vec3b(0,255,0),cv::Vec3b(0,0,255),cv::Vec3b(0,255,255)};
 ros::Publisher superPixelPub;
 ros::Publisher hyperPixelPub;
+ros::Publisher segCloudPub;
+tf::TransformListener* listener;
+tf::TransformBroadcaster* broadcaster;
+std::vector<SegmentationContext> contexts;
+volatile int contextNum = -1;
 
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points);
-void segment(cv::Mat disparities, cv::Mat colors, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud);
+void segment(cv::Mat disparities, cv::Mat colors, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, Eigen::Isometry3d cameraPose);
 void createLookup(const Graph& graph, Eigen::MatrixXf& lookup);
-void repaintSuperPixel(const Graph& graph, cv::Mat& segmentedImage, SuperPixelID id, int segID);
-void onMouse(int event, int x, int y, int flags, void* param);
-void computeSuperPlanes();
+//void repaintSuperPixel(const Graph& graph, cv::Mat& segmentedImage, SuperPixelID id, int segID);
+//void onMouse(int event, int x, int y, int flags, void* param);
+//void computeSuperPlanes();
 
-Eigen::Quaterniond getRotation(Eigen::Vector3d axis)
+Eigen::Quaterniond getRotation(Eigen::Vector3d axis, Eigen::Vector3d initial)
 {
 	// Assume @ (1,0,0) originally
 	if (axis.norm() - 1.0 > 0.001) {axis.normalize();}
-	Eigen::Vector3d q = Eigen::Vector3d::UnitX().cross(axis);
+	Eigen::Vector3d q = initial.cross(axis);
 	double angle = acos(q.dot(axis));
 	double sinAngle = sin(angle/2.0);
 	double cosAngle = cos(angle/2.0);
@@ -99,9 +98,9 @@ Eigen::Quaterniond getRotation(Eigen::Vector3d axis)
 
 int main(int argc, char** argv)
 {
-	Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitY());
-	std::cout << q.x() << "\t" << q.y() << "\t" << q.z() << "\t" << q.w() << std::endl;
-	int r = system("pwd");
+	//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitY());
+	//std::cout << q.x() << "\t" << q.y() << "\t" << q.z() << "\t" << q.w() << std::endl;
+	//int r = system("pwd");
 	ros::Time::init();
 	cv::Mat disparities, colors, depth3;
 
@@ -123,8 +122,14 @@ int main(int argc, char** argv)
 	ros::init(argc, argv, "simple_seg");
 	ros::NodeHandle nh_;
 
+	listener = (new tf::TransformListener());
+	broadcaster = (new tf::TransformBroadcaster());
+
+	ros::spinOnce();
+
 	superPixelPub = nh_.advertise<visualization_msgs::MarkerArray>( "superpixel_vectors", 0 );
 	hyperPixelPub = nh_.advertise<visualization_msgs::MarkerArray>( "hyperpixel_vectors", 0 );
+	segCloudPub = nh_.advertise<sensor_msgs::PointCloud2>("color_cloud", 0);
 
 	message_filters::Subscriber<sensor_msgs::Image> color_sub_ (nh_, colorTopic, 8);
 	message_filters::Subscriber<sensor_msgs::Image> depth_sub_ (nh_, depthTopic, 8);
@@ -132,39 +137,69 @@ int main(int argc, char** argv)
 	message_filters::Synchronizer<KinectSyncPolicy> sync_(KinectSyncPolicy(8), color_sub_, depth_sub_, cloud_sub_);
 
 	sync_.registerCallback(boost::bind(&kinectCallback, _1, _2, _3));
+
+	//ros::CallbackQueue my_queue;
+	//nh_.setCallbackQueue(&my_queue);
+	//my_queue.callOne(ros::WallDuration());
+	//ROS_INFO("Finished");
+	//return 0;
 	ros::spin();
 #endif
 
 }
 
-const int maxCallbacks = 1;
+const int maxCallbacks = 2;
 int numCallbacks = 0;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points)
 {
+	ROS_INFO("Got Callback. Sensor Frame: %s", points->header.frame_id.c_str());
 	if (numCallbacks < maxCallbacks)
 	{
 		numCallbacks++;
 	}
 	else
 	{
-		return;
+		//return;
 	}
+	//std::ofstream outfile;
+	//outfile.open("./temp/superPixels/superVectors.txt");
 
-	ROS_DEBUG("Got Callback.");
+	ROS_INFO("Got Callback. Sensor Frame: %s", points->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cPtr = cv_bridge::toCvCopy(color, "bgr8");
 	cv_bridge::CvImagePtr dPtr = cv_bridge::toCvCopy(depth, "mono8");
 	pcl::PointCloud<pcl::PointXYZ> pCloud; // no color in this topic?
 	pcl::fromROSMsg(*points, pCloud);
-	ROS_DEBUG("Got Cloud.");
+
+	tf::StampedTransform transform;
+	Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+	try
+	{
+		listener->waitForTransform("/world", ros::Time(0),
+				points->header.frame_id, points->header.stamp,
+				"/world", ros::Duration(2.0));
+		listener->lookupTransform("/world", ros::Time(0),
+				points->header.frame_id, points->header.stamp,
+				"/world", transform);
+		tf::TransformTFToEigen(transform, pose);
+	}
+	catch(std::exception& ex)
+	{
+		ROS_ERROR("TF Lookup Failed: %s", ex.what());
+	}
+
+	ROS_INFO("Got Cloud.");
 
 	// TODO:convert to disparity?
-	segment(dPtr->image, cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud));
+	segment(dPtr->image, cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud), pose);
 	//segment(*disparityImage(dPtr->image), cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud));
 
 }
 
-void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud) //, cv::Mat cd)
+void segment(cv::Mat d, cv::Mat c,
+		     pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud,
+		     Eigen::Isometry3d cameraPose) //, cv::Mat cd)
 {
+	ros::Time headerTime = ros::Time::now();
 	srand(time(NULL));
 	cv::Mat disparities, colors, filtd, filtc, filtcd;
 	c.copyTo(colors);
@@ -176,8 +211,7 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud) /
 
 	size_t window = params.windowSize_;
 
-	std::cout << "checkpoint 1.\n";
-	for(int i = 0; i < 3; i++)
+	for(int i = 0; i < 2; i++)
 	{
 		cv::bilateralFilter(colors, filtc, window, window*2, window/2);
 		filtc.copyTo(colors);
@@ -185,39 +219,46 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud) /
 		cv::bilateralFilter(disparities, filtd, window, window*2, window);
 		filtd.copyTo(disparities);
 	}
-	ROS_DEBUG("Got Segmentation.");
+
 	int res = system("mkdir -p ./temp/superPixels/");
 	cv::imwrite("./temp/superPixels/colorf.png", colors);
 
+	// Segmentation setup
+	//SegmentationContext sc;
+	Graph graph;
+	cv::Mat overSegmented;
+	Eigen::MatrixXf spLookup;
+	std::map<SuperPixelID, int> SPtoS;
+	std::vector<SuperPixelID> StoSP[4];
+
 	// Segmentation call
-	//Graph graph;
 	gttic_(OverSegmentation);
 	OverSegmentation::overSegment(disparities, colors, params, graph);
 	gttoc_(OverSegmentation);
 	tictoc_print_();
+	ROS_INFO("Got Segmentation.");
 
 	// Get the color image
-	//cv::Mat overSegmented;
 	OverSegmentation::visualize(graph, overSegmented);
 	createLookup(graph, spLookup);
 	cv::imwrite("./temp/superPixels/overSegmented.png", overSegmented);
+	ROS_INFO("Generated Lookup.");
 
+	pcl::PointCloud<pcl::PointXYZRGB> outCloud;
+	//outCloud.height = pCloud->height;
+	//outCloud.width = pCloud->width;
 	std::map<SuperPixelID, SuperPixel*>::iterator iter;
-	//std::stringstream mapping;
 	std::string idName;
 	int count = 0;
 
-	std::ofstream outfile;
-	outfile.open("./temp/superPixels/vectors.txt");
 	visualization_msgs::MarkerArray mArray;
 
 	ROS_INFO("Got SPs.");
 	for (iter = graph.superPixels_.begin(); iter != graph.superPixels_.end(); ++iter)
 	{
 		count++;
-		Eigen::Vector4d plane = disparityToExplicit(iter->second->plane_->density_.mean());
+		//Eigen::Vector4d plane = disparityToExplicit(iter->second->plane_->density_.mean());
 		//plane.normalize();
-		outfile << "0 0 0 " << plane[0] << " " << plane[1] << " " << plane[2] << " " << "\n";
 
 		// Get ID
 		idName = std::to_string((long unsigned int)(iter->first));
@@ -225,26 +266,37 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud) /
 		ROS_DEBUG("Getting Indices.");
 		// Get central pixel (middle?)
 		int len = iter->second->A_->rows();
+		if (len < 1) {continue;}
 		pcl::PointIndices::Ptr inliers(new pcl::PointIndices ());
 		for (int i = 0; i < len; i++)
 		{
 			int u = (int)(*(iter->second->A_))(i,0);
 			int v = (int)(*(iter->second->A_))(i,1);
+
 			int idx = u + (v * pCloud->width);
 			inliers->indices.push_back(idx);
+
+
+			//cv::Vec3f pixel = colors.at<cv::Vec3f>(v,u);
+			cv::Vec3b pixel = overSegmented.at<cv::Vec3b>(v,u);
+			pcl::PointXYZ point = pCloud->points[idx];
+			pcl::PointXYZRGB sPoint;
+			sPoint.x = point.x; sPoint.y = point.y; sPoint.z = point.z;
+			sPoint.b = pixel[0]; sPoint.g = pixel[1]; sPoint.r = pixel[2];
+			outCloud.points.push_back(sPoint);
 		}
 		ROS_DEBUG("Got Indices.");
 
-		// Extract the inliers
+		/********** Get Subset **********/
 		pcl::ExtractIndices<pcl::PointXYZ> extract;
 		pcl::PointCloud<pcl::PointXYZ>::Ptr spCloud(new pcl::PointCloud<pcl::PointXYZ>);
 		extract.setInputCloud (pCloud);
 		extract.setIndices (inliers);
 		extract.setNegative (false);
 		extract.filter (*spCloud);
-		if (spCloud->size() < 1) {continue;}
 		ROS_DEBUG("Got Inliers.");
 
+		/********** Generate Plane Params **********/
 		Eigen::VectorXf fitPlane;
 		pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr
 		    model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZ> (spCloud));
@@ -254,76 +306,81 @@ void segment(cv::Mat d, cv::Mat c, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud) /
 		ransac.computeModel();
 		ransac.getModelCoefficients(fitPlane);
 		if (fitPlane[0] != fitPlane[0]) {continue;}
+		if (fitPlane[3] < -0.5) {fitPlane = -fitPlane;}
 		ROS_DEBUG_STREAM("Got parameters: " << fitPlane.matrix().transpose());
 
-		/*
-		int u = (int)(*(iter->second->A_))((int)(len/2),0);
-		int v = (int)(*(iter->second->A_))((int)(len/2),1);
+		//int u = (int)(*(iter->second->A_))((int)(len/2),0);
+		//int v = (int)(*(iter->second->A_))((int)(len/2),1);
 		// Get coordinates in point cloud
-		pcl::PointXYZ target = pCloud.points[u + (v * pCloud.width)];
-		*/
+		//pcl::PointXYZ target = pCloud.points[u + (v * pCloud.width)];
 
+		/********** Generate Centroid **********/
 		Eigen::Vector4f centroid;
 		pcl::compute3DCentroid(*spCloud, centroid);
 		if (centroid.x() != centroid.x()) {continue;}
-		else
-		{
-			// Write id @ pixel location
-			//cv::putText(overSegmented, idName, cv::Point(u,v),
-			//		cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
-			//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitZ());
-			Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]));
+
+		// Write id @ pixel location
+		//cv::putText(overSegmented, idName, cv::Point(u,v),
+		//		cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
+		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitZ());
+		Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]), Eigen::Vector3d::UnitX());
 
 
-			// Generate Marker
-			visualization_msgs::Marker marker;
-			marker.header.frame_id = "openni_depth_optical_frame";
-			//marker.header.frame_id = "world";
-			marker.header.stamp = ros::Time();
-			marker.ns = "MCMC";
-			marker.id = count;
-			marker.type = visualization_msgs::Marker::ARROW;
-			marker.action = visualization_msgs::Marker::ADD;
-			marker.pose.position.x = centroid.x();
-			marker.pose.position.y = centroid.y();
-			marker.pose.position.z = centroid.z();
-			marker.pose.orientation.x = q.x();//plane[0];
-			marker.pose.orientation.y = q.y();//plane[1];
-			marker.pose.orientation.z = q.z();//plane[2];
-			marker.pose.orientation.w = q.w();
-			marker.scale.x = 0.2;
-			marker.scale.y = 0.2;
-			marker.scale.z = 0.2;
-			marker.color.a = 1.0;
-			marker.color.r = 0.0;
-			marker.color.g = 1.0;
-			marker.color.b = 0.0;
-			mArray.markers.push_back(marker);
-		}
-
-
+		/********** Generate Marker **********/
+		visualization_msgs::Marker marker;
+		marker.header.frame_id = "segment_result";
+		marker.header.stamp = headerTime;
+		marker.ns = "MCMC";
+		marker.id = count;
+		marker.type = visualization_msgs::Marker::ARROW;
+		marker.action = visualization_msgs::Marker::ADD;
+		marker.pose.position.x = centroid.x();
+		marker.pose.position.y = centroid.y();
+		marker.pose.position.z = centroid.z();
+		marker.pose.orientation.x = q.x();//plane[0];
+		marker.pose.orientation.y = q.y();//plane[1];
+		marker.pose.orientation.z = q.z();//plane[2];
+		marker.pose.orientation.w = q.w();
+		marker.scale.x = 0.2;
+		marker.scale.y = 0.2;
+		marker.scale.z = 0.2;
+		marker.color.a = 1.0;
+		marker.color.r = 0.0;
+		marker.color.g = 1.0;
+		marker.color.b = 0.0;
+		mArray.markers.push_back(marker);
 	}
+
+	ROS_INFO("Ready to publish.");
+	sensor_msgs::PointCloud2 msgCloud;
+	pcl::toROSMsg(outCloud, msgCloud);
+	//msgCloud.header.seq = 1;
+	msgCloud.header.frame_id = "segment_result";
+	msgCloud.header.stamp = headerTime;
+
+	tf::StampedTransform transform;
+	tf::TransformEigenToTF(cameraPose, transform);
+	broadcaster->sendTransform(tf::StampedTransform(transform, headerTime, "/world", "segment_result"));
+	//ROS_INFO("Cloud Width: %i\tHeight: %i", msgCloud.width, msgCloud.height);
 	superPixelPub.publish(mArray);
-	outfile.close();
-	//std::cout << "SuperPixels: " << count << std::endl;
+	segCloudPub.publish(msgCloud);
+	ROS_INFO("Published.");
 
+	//contexts.push_back(sc);
 
-	cv::namedWindow("Result");
-	cv::setMouseCallback("Result", onMouse, 0);
-	cv::imshow("Result", overSegmented);
+	//cv::namedWindow("Result");
+	//cv::setMouseCallback("Result", onMouse, 0);
+	//cv::imshow("Result", overSegmented);
 
-	cv::waitKey(0);
+	//cv::waitKey(0);
 
-	//std::ofstream outfile;
-	//outfile.open("./temp/superPixels/mapping.txt");
-	//outfile << mapping.str();
+	//TODO: Better way for this...
+	//numCallbacks--;
 
-	//FILE* pFile = fopen("mapping.txt", "w");
-	//fprintf(pFile, "%s", mapping.str().c_str());
-
+	ROS_INFO("Unto the Breach!.");
+	return;
 }
 
-/* ********************************************************************************************** */
 void createLookup(const Graph& graph, Eigen::MatrixXf& lookup)
 {
 	lookup = Eigen::MatrixXf::Zero(kHeight, kWidth);
@@ -339,112 +396,4 @@ void createLookup(const Graph& graph, Eigen::MatrixXf& lookup)
 			lookup(v,u) = superPixelIt->first;
 		}
 	}
-}
-
-void repaintSuperPixel(const Graph& graph, cv::Mat& segmentedImage, SuperPixelID id, int segID)
-{
-	// Find the superpixel index for each pixel
-	std::map <SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(id);//.begin();
-
-	// Set the colors for the pixels
-	for(size_t pixelIdx = 0; pixelIdx < superPixelIt->second->A_->rows(); pixelIdx++)
-	{
-		size_t u = (*superPixelIt->second->A_)(pixelIdx, 0), v = (*superPixelIt->second->A_)(pixelIdx, 1);
-		segmentedImage.at<cv::Vec3b>(v,u) = segColors[segID];
-	}
-
-}
-
-void onMouse(int event, int x, int y, int flags, void* param)
-{
-
-    if (event == CV_EVENT_LBUTTONDOWN)
-    {
-    	// Add current superpixel to current S
-    	SuperPixelID sID = (SuperPixelID)spLookup(y,x);
-
-    	std::cout << "x=" << x << ", " <<
-    	        	 "y=" << y << ", " <<
-    	        	 "s=" << sID << std::endl;
-    	//StoSP.insert(std::pair<SuperPixelID, int>(sID, currentS));
-    	StoSP[currentS].push_back(sID);
-    	SPtoS.insert(std::pair<int, SuperPixelID>(currentS, sID));
-    	// Recolor image
-    	repaintSuperPixel(graph, overSegmented, sID, currentS);
-    	cv::imshow("Result", overSegmented);
-    	
-    	std::map<SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(sID);
-    	Plane p(*(superPixelIt->second->A_),*(superPixelIt->second->b_));
-		gtsam::Vector local = disparityToExplicit(p.density_.mean());
-		gtsam::Vector original = (superPixelIt->second->plane_->density_.mean());
-		std::cout << "Local Plane Parameters: " << local.matrix().transpose() << std::endl;
-		std::cout << "Plane Parameters Disparity: " << original.matrix().transpose() << std::endl;
-    }
-    else if (event == CV_EVENT_RBUTTONDOWN)
-    {
-    	// Prompt for new S
-    	//std::string newS;
-    	//std::cout << "Select new S value: 0=A; 1=B; 2=C; 3=D : \n";
-    	//std::cin >> newS;
-    	//currentS = atoi(newS.c_str());
-    	currentS++;
-    	currentS = currentS % 4;
-    	std::cout << "S index: " << currentS << std::endl;
-    }
-    else if (event == CV_EVENT_MBUTTONDOWN)
-    {
-    	// go!
-    	cv::imwrite("./temp/superPixels/overSegmented.png", overSegmented);
-    	computeSuperPlanes();
-    }
-}
-
-void computeSuperPlanes()
-{
-	std::ofstream outfile;
-	outfile.open("./temp/superPixels/superVectors.txt");
-
-	for (int i = 0; i < 4; i++)
-	{
-		std::cout << "S_" << (i) << ":\n";
-		//SuperPixel ssp;
-		//ssp.A_ = new Matrix();
-		//ssp.b_ = new Matrix();
-		Eigen::MatrixXd A;// = new Eigen::MatrixXd();
-		Eigen::MatrixXd b;// = new Eigen::MatrixXd();
-		Eigen::MatrixXd tempA;
-		Eigen::MatrixXd tempb;
-		A.resize(0,3);
-		b.resize(0,1);
-
-		for (int j = 0; j < StoSP[i].size(); j++)
-		{
-			//std::cout << "\t" << (j) << ":" << StoSP[i][j] << "\n";
-
-			std::map <SuperPixelID, SuperPixel*>::const_iterator superPixelIt = graph.superPixels_.find(StoSP[i][j]);
-
-			gtsam::Vector local = disparityToExplicit(superPixelIt->second->plane_->density_.mean());
-			//std::cout << j << " Plane Parameters: " << local.matrix().transpose() << std::endl;
-
-			tempA.resize(A.rows()+superPixelIt->second->A_->rows(),superPixelIt->second->A_->cols());
-			tempA << A,*(superPixelIt->second->A_);
-			A = tempA;
-
-			tempb.resize(b.rows()+superPixelIt->second->b_->rows(),superPixelIt->second->b_->cols());
-			tempb << b,*(superPixelIt->second->b_);
-			b = tempb;
-		}
-
-		if (A.rows() > 0)
-		{
-			Plane p(A,b);
-			gtsam::Vector local = disparityToExplicit(p.density_.mean());
-			std::cout << "Plane Parameters: " << local.matrix().transpose() << std::endl;
-			std::cout << "Error: " << p.error_ << "\tNormalized: " << p.error_/A.rows() << std::endl;
-			outfile << "0 0 0 " << local[0] << " " << local[1] << " " << local[2] << " " << "\n";
-
-		}
-
-	}
-	outfile << "0 0 0 0 0 1 " << std::endl;
 }
