@@ -51,7 +51,9 @@
 
 #include <map>
 */
+#include <math.h>
 #include "tf_eigen.h"
+#include "GraphUtils.h"
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -73,9 +75,6 @@ volatile int contextNum = -1;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points);
 void segment(cv::Mat disparities, cv::Mat colors, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, Eigen::Isometry3d cameraPose);
 void createLookup(const Graph& graph, Eigen::MatrixXf& lookup);
-//void repaintSuperPixel(const Graph& graph, cv::Mat& segmentedImage, SuperPixelID id, int segID);
-//void onMouse(int event, int x, int y, int flags, void* param);
-//void computeSuperPlanes();
 
 Eigen::Quaterniond getRotation(Eigen::Vector3d axis, Eigen::Vector3d initial)
 {
@@ -200,6 +199,11 @@ void segment(cv::Mat d, cv::Mat c,
 		     Eigen::Isometry3d cameraPose) //, cv::Mat cd)
 {
 	ros::Time headerTime = ros::Time::now();
+	tf::StampedTransform transform;
+	tf::TransformEigenToTF(cameraPose, transform);
+	Eigen::Isometry3f cameraFrameTF = cameraPose.cast<float>();//cameraPose.inverse(Eigen::TransformTraits::Isometry).cast<float>();
+	broadcaster->sendTransform(tf::StampedTransform(transform, headerTime, "/world", "segment_result"));
+
 	srand(time(NULL));
 	cv::Mat disparities, colors, filtd, filtc, filtcd;
 	c.copyTo(colors);
@@ -250,6 +254,8 @@ void segment(cv::Mat d, cv::Mat c,
 	int count = 0, validCount = 0;
 
 	visualization_msgs::MarkerArray mArray;
+	std::map<long unsigned int, int> spModelLookup;
+	std::vector<Eigen::Vector2i> spCenters;
 	Eigen::MatrixXf Theta = Eigen::MatrixXf::Zero(4, graph.superPixels_.size());
 
 	ROS_INFO("Got SPs.");
@@ -310,13 +316,20 @@ void segment(cv::Mat d, cv::Mat c,
 		if (fabs(fitPlane[0]) < 0.001) {continue;}
 		if (fitPlane[3] < -0.5) {fitPlane = -fitPlane;}
 
-		Theta.col(validCount) = fitPlane;
+		// Convert to Globals
+		Eigen::VectorXf theta(4);
+		theta.topRows(3) = cameraFrameTF.rotation() * fitPlane.topRows(3);
+		theta(3) = fitPlane(3);
+
+		Theta.col(validCount) = theta;//fitPlane;
+		spModelLookup.insert(std::pair<long unsigned int, int>(iter->first, validCount));
 		validCount++;
-		ROS_DEBUG_STREAM("Got parameters: " << fitPlane.matrix().transpose());
+		//ROS_DEBUG_STREAM("Got parameters: " << fitPlane.matrix().transpose());
 
 
-		//int u = (int)(*(iter->second->A_))((int)(len/2),0);
-		//int v = (int)(*(iter->second->A_))((int)(len/2),1);
+		int u = (int)(*(iter->second->A_))((int)(len/2),0);
+		int v = (int)(*(iter->second->A_))((int)(len/2),1);
+		spCenters.push_back(Eigen::Vector2i(u,v));
 		// Get coordinates in point cloud
 		//pcl::PointXYZ target = pCloud.points[u + (v * pCloud.width)];
 
@@ -325,24 +338,32 @@ void segment(cv::Mat d, cv::Mat c,
 		pcl::compute3DCentroid(*spCloud, centroid);
 		if (centroid.x() != centroid.x()) {continue;}
 
+		Eigen::Vector4f gCentroid;
+		if (centroid(3) == 0) {centroid(3) = 1;}
+		gCentroid = cameraFrameTF * centroid;
+
+		//ROS_INFO_STREAM("centroid:\n" << centroid.matrix().transpose()
+		//		<< "gCentroid:\n" << gCentroid.matrix().transpose());
+
 		// Write id @ pixel location
 		//cv::putText(overSegmented, idName, cv::Point(u,v),
 		//		cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
 		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitZ());
-		Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]), Eigen::Vector3d::UnitX());
+		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]), Eigen::Vector3d::UnitX());
+		Eigen::Quaterniond q = getRotation(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
 
 
 		/********** Generate Marker **********/
 		visualization_msgs::Marker marker;
-		marker.header.frame_id = "segment_result";
+		marker.header.frame_id = "world";
 		marker.header.stamp = headerTime;
 		marker.ns = "MCMC";
 		marker.id = count;
 		marker.type = visualization_msgs::Marker::ARROW;
 		marker.action = visualization_msgs::Marker::ADD;
-		marker.pose.position.x = centroid.x();
-		marker.pose.position.y = centroid.y();
-		marker.pose.position.z = centroid.z();
+		marker.pose.position.x = gCentroid.x();
+		marker.pose.position.y = gCentroid.y();
+		marker.pose.position.z = gCentroid.z();
 		marker.pose.orientation.x = q.x();//plane[0];
 		marker.pose.orientation.y = q.y();//plane[1];
 		marker.pose.orientation.z = q.z();//plane[2];
@@ -364,13 +385,20 @@ void segment(cv::Mat d, cv::Mat c,
 	// Save distances
 	Eigen::MatrixXf distances = Theta.row(3);
 	// Transform Vectors
-	Theta.row(3) = Eigen::MatrixXf::Ones(1, validCount);
-	Eigen::MatrixXf ThetaG = Eigen::MatrixXf::Zero(4, validCount);
-	//ROS_INFO("%li, %li, %li", ThetaG.rows(), cameraPose.matrix().rows(), Theta.rows());
-	ROS_INFO_STREAM(cameraPose.matrix());
-	ThetaG = cameraPose.matrix().cast<float>() * Theta;
+	//Theta.row(3) = Eigen::MatrixXf::Ones(1, validCount);
+	//Eigen::MatrixXf ThetaG = Eigen::MatrixXf::Zero(4, validCount);
+	//ROS_INFO("%li, %li, %li", ThetaG.rows(), cameraFrameTF.matrix().rows(), Theta.rows());
+	ROS_INFO_STREAM(cameraFrameTF.matrix());
+	//ThetaG.topRows(3) = cameraFrameTF.rotation().cast<float>() * Theta.topRows(3);
 	//ThetaG.row(3) = distances;
-	ROS_INFO_STREAM("Theta Global: \n" << ThetaG.matrix());
+	//ROS_INFO_STREAM("Theta Global: \n" << ThetaG.matrix());
+
+	Eigen::VectorXf weights(4);
+	weights << 1,1,1,4;
+	Eigen::MatrixXf g = getPlanarAdjacencyGraph(graph, Theta, weights, spModelLookup);//getSelfAdjacencyGraph(Theta, 0.5);
+	ROS_INFO_STREAM("Adjacency Graph: \n" << g);
+	//writeGraph(g, "graph.dot");
+	writeOrderedGraph(g, "graph.dot", spCenters);
 
 	ROS_INFO("Ready to publish.");
 	sensor_msgs::PointCloud2 msgCloud;
@@ -379,9 +407,7 @@ void segment(cv::Mat d, cv::Mat c,
 	msgCloud.header.frame_id = "segment_result";
 	msgCloud.header.stamp = headerTime;
 
-	tf::StampedTransform transform;
-	tf::TransformEigenToTF(cameraPose, transform);
-	broadcaster->sendTransform(tf::StampedTransform(transform, headerTime, "/world", "segment_result"));
+
 	//ROS_INFO("Cloud Width: %i\tHeight: %i", msgCloud.width, msgCloud.height);
 	superPixelPub.publish(mArray);
 	segCloudPub.publish(msgCloud);
@@ -418,3 +444,5 @@ void createLookup(const Graph& graph, Eigen::MatrixXf& lookup)
 		}
 	}
 }
+
+
