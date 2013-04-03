@@ -146,7 +146,7 @@ openni_rgb_optical_frame.Enabled=1
 segment_result.Enabled=1
 world.Enabled=1
 [Window]
-Height=1176
-Width=1855
-X=-42
+Height=1212
+Width=1871
+X=-49
 Y=0

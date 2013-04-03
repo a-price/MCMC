@@ -1,7 +1,7 @@
 # Project Description
 cmake_minimum_required(VERSION 2.6)
 project(MCMC CXX C)
-set(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_CXX_FLAGS "-std=c++0x -g")
 
 include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #execute_process(COMMAND export "ROS_PACKAGE_PATH=${PROJECT_SOURCE_DIR}:$ROS_PACKAGE_PATH")
@@ -81,6 +81,29 @@ LIST(SORT scripts_source)
 add_library(${PROJECT_NAME} SHARED ${lib_source})
 #target_link_libraries(${PROJECT_NAME} freenect) 
 
+enable_testing()
+
+# Build unit tests
+message(STATUS "\n-- FULL TESTS: ")
+foreach(test_src_file ${tests_source})
+    get_filename_component(test_base ${test_src_file} NAME_WE)
+    message(STATUS "Adding test ${test_base}" )
+    add_executable(${test_base} ${test_src_file} ${unit_tests_source})
+    target_link_libraries(${test_base} ${PROJECT_NAME})
+endforeach(test_src_file)
+
+# Build unit tests
+message(STATUS "\n-- UNIT TESTS: ")
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+foreach(utest_src_file ${unit_tests_source})
+    get_filename_component(test_base ${utest_src_file} NAME_WE)
+    message(STATUS "Adding test ${test_base}" )
+    add_executable(${test_base} "src/tests/test_units.cpp" ${utest_src_file})
+    target_link_libraries(${test_base} ${PROJECT_NAME})
+    add_test(${test_base} ${EXECUTABLE_OUTPUT_PATH}/${test_base})
+    add_custom_target(${test_base}.run ${test_base} ${ARGN})
+    add_dependencies(check ${test_base})
+endforeach(utest_src_file)
 
 
 # Build executables

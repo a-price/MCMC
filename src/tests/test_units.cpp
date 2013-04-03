@@ -1,6 +1,6 @@
 /**
  * \file test_units.cpp
- * \brief Runs all unit tests defined for HuboApplication
+ * \brief Runs all unit tests defined for the application
  *
  * \author Andrew Price
  */
@@ -10,13 +10,11 @@
 #include <cppunit/extensions/TestFactoryRegistry.h>
 #include <cppunit/ui/text/TextTestRunner.h>
 
-#include <boost/thread/thread.hpp>
-#include <Eigen/Geometry>
+//#include <boost/thread/thread.hpp>
+//#include <Eigen/Geometry>
 
 #include <iostream>
 #include <string>
-
-#include "Fastrak.h"
 
 int main()
 {
@@ -29,6 +27,7 @@ int main()
 
 	// Send the output to cerr when the compiler runs
 	runner.setOutputter(new CppUnit::CompilerOutputter(&runner.result(), std::cerr));
+	//runner.setOutputter(new CppUnit::XmlOutputter(&runner.result(), std::cerr));
 
 	// Actually run the thing.
 	bool successful = runner.run();

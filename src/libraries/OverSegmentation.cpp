@@ -10,6 +10,8 @@
 
 #include <gtsam/base/timing.h>
 
+#include <iostream>
+
 using namespace std;
 using namespace gtsam;
 
@@ -26,7 +28,7 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	bilateralFilter(disparities, colors, smoothed, params.windowSize_,
 			params.spatialStdev_, params.disparityStdev_);
 	gttoc_(Bilateral_filter);
-
+	std::cerr << "BL Filtered." << std::endl;
 	if(debug) cv::imwrite("./smoothed.png", smoothed);
 
 	// 2. Compute the weights of the edges between the pixels
@@ -35,18 +37,18 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	Edge *edges = new Edge[numPixels * 4];
 	createEdges (disparities, smoothed, params, edges);
 	gttoc_(Create_edges);
-
+	std::cerr << "Created Edges." << std::endl;
 	// 3. Perform union-find with the edge weights
 	gttic_(Union_find);
 	universe *u = segment_graph(numPixels, 4 * numPixels, edges,
 			params.weightThreshold_, 0);
 	gttoc_(Union_find);
-
+	std::cerr << "Graph Segmented." << std::endl;
 	// 4. Collect the pixels into their superpixels and get the neighbors
 	gttic_(Create_superpixels);
 	createSuperPixels (*u, disparities, graph.superPixels_, graph.boundaryPixels_);
 	gttoc_(Create_superpixels);
-
+	std::cerr << "SP Created." << std::endl;
 	// 5. Compute the edge probabilities
 	Problem::computeEdgeProbs(graph);
 }
@@ -93,10 +95,15 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 	map <SuperPixel*, size_t> numRecordedPixels; 
 	SuperPixel* sp;
 	size_t index;
-
+	std::cerr << "CSP Initialized." << std::endl;
+	std::cerr << "Disp: " << disparities.rows << "x" << disparities.cols << std::endl;
+	std::cerr << "SPs: " << superPixels.size() << std::endl;
+	std::cerr << "Universe: " << u.num_sets() << std::endl;
+	long int errCount = 0;
 	// Traverse each pixel, creating superpixels if need be and
 	// determining the neighbors
 	for (size_t y = 0, k = 0; y < kHeight; y++) {
+		//std::cerr << " " << k ;
 		for (size_t x = 0; x < kWidth; x++, k++) {
 
 			// Get the superpixel ID for this pixel
@@ -108,7 +115,7 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 			// Get the superpixel for this pixel
 			map <SuperPixelID, SuperPixel*>::iterator superPixelIt = superPixels.find(id);
 			if(superPixelIt == superPixels.end()) {
-
+				//std::cerr << "Creating SP: " << id << std::endl;
 				// Create a new superpixel
 				size_t numPixels = u.size(id);
 				sp = new SuperPixel;
@@ -120,6 +127,7 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 				*(sp->b_) = zero(numPixels);
 				index = 0;
 				numRecordedPixels[sp] = 1;
+				//std::cerr << "Created SP: " << id << std::endl;
 			}
 	
 			else {
@@ -127,19 +135,38 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 				map <SuperPixel*, size_t>::iterator it = numRecordedPixels.find(sp);
 				index = it->second;
 				it->second++;
+				if (index > 100 && index < 120)
+				{
+					//std::cerr << "SP*: " << sp << std::endl;
+					//std::cerr << "idx: " << it->second << std::endl;
+				}
 			}
 
 			// Get the (u,v) values and the disparity value for the pixel
 			// TODO Use x,y instead of u,v which is already defined
 			size_t v = k / kWidth, u = k % kWidth;
 			size_t disparity = disparities.at<short>(v,u);
-
+			if (index > 100 && index < 120)
+			{
+				//std::cerr << "Placing Pixel in SP: " << index << std::endl;
+				//std::cerr << "A: " << (*sp->A_).rows() << "x" << (*sp->A_).cols() << std::endl;
+				//std::cerr << "b: " << (*sp->b_).rows() << "x" << (*sp->b_).cols() << std::endl;
+			}
 			// Place the pixel in the superpixel
+			if (index < sp->A_->rows())
+			{
 			(*sp->A_)(index,0) = u;
 			(*sp->A_)(index,1) = v;
 			(*sp->A_)(index,2) = 1.0;
 			(*sp->b_)(index) = disparity;
-
+			}
+			else
+			{
+				//std::cerr << "Error: " << sp->id_ << "# " << index << std::endl;
+				errCount++;
+			}
+			//if (index > 100 && index < 120)
+				//std::cerr << "Placed Pixel in SP: " << index << std::endl;
 			// =================================================
 			// B. Determine the neighbors of its superpixel
 
@@ -165,7 +192,7 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 			} 
 		}
 	}
-	
+	std::cerr << std::endl << "CSP Split." << std::endl;
 	// Compute the local planes
 	map <SuperPixelID, SuperPixel*>::iterator spIt = superPixels.begin();
 	while(spIt != superPixels.end()) {
@@ -202,6 +229,7 @@ void OverSegmentation::createSuperPixels (universe& u, const cv::Mat& disparitie
 			exit(0);
 		}
 	}
+	std::cerr << "Errors: " << errCount << std::endl;
 }
 
 /* ********************************************************************************************** */

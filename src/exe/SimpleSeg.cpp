@@ -27,7 +27,7 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-//#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include <pcl/ros/conversions.h>
 #include <pcl/common/centroid.h>
@@ -38,7 +38,7 @@
 #include <pcl/sample_consensus/sac_model_plane.h>
 
 // Segmentation includes...
-#include "InteractiveSegmenter.h"
+//#include "InteractiveSegmenter.h"
 #include "SegmentationContext.h"
 /*
 #include "Common.h"
@@ -52,8 +52,10 @@
 #include <map>
 */
 #include <math.h>
+#include <exception>
 #include "tf_eigen.h"
 #include "GraphUtils.h"
+#include "MatUtils.h"
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -72,6 +74,8 @@ tf::TransformBroadcaster* broadcaster;
 std::vector<SegmentationContext> contexts;
 volatile int contextNum = -1;
 
+OverSegmentationParameters params;
+
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points);
 void segment(cv::Mat disparities, cv::Mat colors, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, Eigen::Isometry3d cameraPose);
 void createLookup(const Graph& graph, Eigen::MatrixXf& lookup);
@@ -85,7 +89,6 @@ Eigen::Quaterniond getRotation(Eigen::Vector3d axis, Eigen::Vector3d initial)
 	double sinAngle = sin(angle/2.0);
 	double cosAngle = cos(angle/2.0);
 
-
 	Eigen::Quaterniond ret;
 	ret.x() = q.x() * sinAngle;
 	ret.y() = q.y() * sinAngle;
@@ -97,13 +100,13 @@ Eigen::Quaterniond getRotation(Eigen::Vector3d axis, Eigen::Vector3d initial)
 
 int main(int argc, char** argv)
 {
-	//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitY());
-	//std::cout << q.x() << "\t" << q.y() << "\t" << q.z() << "\t" << q.w() << std::endl;
-	//int r = system("pwd");
 	ros::Time::init();
-	cv::Mat disparities, colors, depth3;
+
+	IO::readSegmentationParams(paramFilename, params);
+	params.print();
 
 #ifndef USE_BAGFILE
+	cv::Mat disparities, colors, depth3;
 
 	disparities = *(disparityImage(cv::imread("/home/arprice/workspace/eclipseMCMC/depth1.png")));
 	colors = cv::imread("/home/arprice/workspace/eclipseMCMC/color1.png");
@@ -147,12 +150,14 @@ int main(int argc, char** argv)
 
 }
 
-const int maxCallbacks = 2;
+
+
+const int maxCallbacks = 5;
 int numCallbacks = 0;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points)
 {
 	ROS_INFO("Got Callback. Sensor Frame: %s", points->header.frame_id.c_str());
-	if (numCallbacks < maxCallbacks)
+	if (numCallbacks < maxCallbacks && ros::ok())
 	{
 		numCallbacks++;
 	}
@@ -160,14 +165,12 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	{
 		//return;
 	}
-	//std::ofstream outfile;
-	//outfile.open("./temp/superPixels/superVectors.txt");
+	cv::Mat disparities, colors, depth3;
 
-	ROS_INFO("Got Callback. Sensor Frame: %s", points->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cPtr = cv_bridge::toCvCopy(color, "bgr8");
 	cv_bridge::CvImagePtr dPtr = cv_bridge::toCvCopy(depth, "mono8");
-	pcl::PointCloud<pcl::PointXYZ> pCloud; // no color in this topic?
-	pcl::fromROSMsg(*points, pCloud);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZ>); // no color in this topic?
+	pcl::fromROSMsg(*points, *pCloud);
 
 	tf::StampedTransform transform;
 	Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
@@ -189,7 +192,10 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	ROS_INFO("Got Cloud.");
 
 	// TODO:convert to disparity?
-	segment(dPtr->image, cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud), pose);
+	dPtr->image.copyTo(disparities);
+	cPtr->image.copyTo(colors);
+	segment(disparities, colors, pCloud, pose);
+	//segment(disparities, colors, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud), pose);
 	//segment(*disparityImage(dPtr->image), cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud));
 
 }
@@ -198,6 +204,7 @@ void segment(cv::Mat d, cv::Mat c,
 		     pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud,
 		     Eigen::Isometry3d cameraPose) //, cv::Mat cd)
 {
+	ROS_INFO("Called Segment.");
 	ros::Time headerTime = ros::Time::now();
 	tf::StampedTransform transform;
 	tf::TransformEigenToTF(cameraPose, transform);
@@ -208,10 +215,6 @@ void segment(cv::Mat d, cv::Mat c,
 	cv::Mat disparities, colors, filtd, filtc, filtcd;
 	c.copyTo(colors);
 	d.copyTo(disparities);
-
-	OverSegmentationParameters params;
-	IO::readSegmentationParams(paramFilename, params);
-	params.print();
 
 	size_t window = params.windowSize_;
 
@@ -236,7 +239,9 @@ void segment(cv::Mat d, cv::Mat c,
 	std::vector<SuperPixelID> StoSP[4];
 
 	// Segmentation call
+
 	gttic_(OverSegmentation);
+	ROS_INFO("Segmenting.");
 	OverSegmentation::overSegment(disparities, colors, params, graph);
 	gttoc_(OverSegmentation);
 	tictoc_print_();
@@ -380,24 +385,17 @@ void segment(cv::Mat d, cv::Mat c,
 
 	// Trim Theta
 	Theta.conservativeResize(4, validCount);
-	ROS_INFO_STREAM("Theta: \n" << Theta.matrix());
+	saveMatrix("theta2.bmat", Theta);
+	//ROS_INFO_STREAM("Theta: \n" << Theta.matrix());
 
 	// Save distances
 	Eigen::MatrixXf distances = Theta.row(3);
-	// Transform Vectors
-	//Theta.row(3) = Eigen::MatrixXf::Ones(1, validCount);
-	//Eigen::MatrixXf ThetaG = Eigen::MatrixXf::Zero(4, validCount);
-	//ROS_INFO("%li, %li, %li", ThetaG.rows(), cameraFrameTF.matrix().rows(), Theta.rows());
 	ROS_INFO_STREAM(cameraFrameTF.matrix());
-	//ThetaG.topRows(3) = cameraFrameTF.rotation().cast<float>() * Theta.topRows(3);
-	//ThetaG.row(3) = distances;
-	//ROS_INFO_STREAM("Theta Global: \n" << ThetaG.matrix());
 
 	Eigen::VectorXf weights(4);
 	weights << 1,1,1,4;
 	Eigen::MatrixXf g = getPlanarAdjacencyGraph(graph, Theta, weights, spModelLookup);//getSelfAdjacencyGraph(Theta, 0.5);
-	ROS_INFO_STREAM("Adjacency Graph: \n" << g);
-	//writeGraph(g, "graph.dot");
+	//ROS_INFO_STREAM("Adjacency Graph: \n" << g);
 	writeOrderedGraph(g, "graph.dot", spCenters);
 
 	ROS_INFO("Ready to publish.");
