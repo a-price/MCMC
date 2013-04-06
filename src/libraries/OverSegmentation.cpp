@@ -28,7 +28,6 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	bilateralFilter(disparities, colors, smoothed, params.windowSize_,
 			params.spatialStdev_, params.disparityStdev_);
 	gttoc_(Bilateral_filter);
-	std::cerr << "BL Filtered." << std::endl;
 	if(debug) cv::imwrite("./smoothed.png", smoothed);
 
 	// 2. Compute the weights of the edges between the pixels
@@ -38,22 +37,20 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	size_t numEdges = createEdges (disparities, smoothed, params, edges);
 
 	gttoc_(Create_edges);
-	std::cerr << "Created Edges." << std::endl;
 	// 3. Perform union-find with the edge weights
 	gttic_(Union_find);
 	universe *u = segment_graph(numPixels, numEdges, edges,
 			params.weightThreshold_, 0);
 	gttoc_(Union_find);
-	std::cerr << "Graph Segmented." << std::endl;
 	// 4. Collect the pixels into their superpixels and get the neighbors
 	gttic_(Create_superpixels);
 	createSuperPixels (*u, disparities, graph.superPixels_, graph.boundaryPixels_);
 	gttoc_(Create_superpixels);
-	std::cerr << "SP Created." << std::endl;
 	// 5. Compute the edge probabilities
 	Problem::computeEdgeProbs(graph);
 
 	// TODO: Consider cleaning up memory 
+	delete edges;
 }
 
 /* ********************************************************************************************** */

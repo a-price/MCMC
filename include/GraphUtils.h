@@ -12,13 +12,23 @@
 
 #include "Graph.h"
 #include <map>
+#include "SPGraph.h"
 
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights = Eigen::Vector4f::Ones(), double temperature=8);
 
+double pMerge(SPNode a, SPNode b, double temperature=8);
+
 Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf weights, double minP = 0);
 
-Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, Eigen::VectorXf weights, std::map<SuperPixelID, int>& spModelLookup);
+//Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, Eigen::VectorXf weights, std::map<SuperPixelID, int>& spModelLookup);
+
+SPGraph getPlanarAdjacencyGraph(Graph& graph,
+		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
+		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
+		std::map<SuperPixelID, int>& spModelLookup);
+
+void mergeNewScanGraph(SPGraph& original, SPGraph& incoming);
 
 void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency);
 

@@ -1,8 +1,8 @@
 # Project Description
 cmake_minimum_required(VERSION 2.6)
 project(MCMC CXX C)
-set(CMAKE_CXX_FLAGS "-std=c++0x -g -O0")
-set(ROS_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS "-std=c++0x -g")
+set(ROS_BUILD_TYPE Release)
 
 include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #execute_process(COMMAND export "ROS_PACKAGE_PATH=${PROJECT_SOURCE_DIR}:$ROS_PACKAGE_PATH")
@@ -85,15 +85,6 @@ add_library(${PROJECT_NAME} SHARED ${lib_source})
 enable_testing()
 
 # Build unit tests
-message(STATUS "\n-- FULL TESTS: ")
-foreach(test_src_file ${tests_source})
-    get_filename_component(test_base ${test_src_file} NAME_WE)
-    message(STATUS "Adding test ${test_base}" )
-    add_executable(${test_base} ${test_src_file} ${unit_tests_source})
-    target_link_libraries(${test_base} ${PROJECT_NAME})
-endforeach(test_src_file)
-
-# Build unit tests
 message(STATUS "\n-- UNIT TESTS: ")
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 foreach(utest_src_file ${unit_tests_source})
@@ -105,6 +96,15 @@ foreach(utest_src_file ${unit_tests_source})
     add_custom_target(${test_base}.run ${test_base} ${ARGN})
     add_dependencies(check ${test_base})
 endforeach(utest_src_file)
+
+# Build system tests 
+message(STATUS "\n-- SYSTEM TESTS: ")
+foreach(script_src_file ${system_tests_source})
+    get_filename_component(script_base ${script_src_file} NAME_WE)
+    message(STATUS "Adding test ${script_base}" )
+    add_executable(${script_base} ${script_src_file})
+    target_link_libraries(${script_base} ${PROJECT_NAME})
+endforeach(script_src_file)
 
 
 # Build executables

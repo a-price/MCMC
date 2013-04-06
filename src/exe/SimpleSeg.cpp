@@ -56,6 +56,7 @@
 #include "tf_eigen.h"
 #include "GraphUtils.h"
 #include "MatUtils.h"
+#include "GraphVisualization.h"
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -69,6 +70,8 @@ const std::string pointTopic = "/camera/rgb/points";
 ros::Publisher superPixelPub;
 ros::Publisher hyperPixelPub;
 ros::Publisher segCloudPub;
+ros::Publisher nodePub;
+ros::Publisher edgePub;
 tf::TransformListener* listener;
 tf::TransformBroadcaster* broadcaster;
 std::vector<SegmentationContext> contexts;
@@ -132,6 +135,8 @@ int main(int argc, char** argv)
 	superPixelPub = nh_.advertise<visualization_msgs::MarkerArray>( "superpixel_vectors", 0 );
 	hyperPixelPub = nh_.advertise<visualization_msgs::MarkerArray>( "hyperpixel_vectors", 0 );
 	segCloudPub = nh_.advertise<sensor_msgs::PointCloud2>("color_cloud", 0);
+	nodePub = nh_.advertise<visualization_msgs::MarkerArray>( "graph_nodes", 0 );
+	edgePub = nh_.advertise<visualization_msgs::MarkerArray>( "graph_edges", 0 );
 
 	message_filters::Subscriber<sensor_msgs::Image> color_sub_ (nh_, colorTopic, 8);
 	message_filters::Subscriber<sensor_msgs::Image> depth_sub_ (nh_, depthTopic, 8);
@@ -152,7 +157,7 @@ int main(int argc, char** argv)
 
 
 
-const int maxCallbacks = 5;
+const int maxCallbacks = 2;
 int numCallbacks = 0;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points)
 {
@@ -163,7 +168,7 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	}
 	else
 	{
-		//return;
+		return;
 	}
 	cv::Mat disparities, colors, depth3;
 
@@ -195,7 +200,6 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	dPtr->image.copyTo(disparities);
 	cPtr->image.copyTo(colors);
 	segment(disparities, colors, pCloud, pose);
-	segment(disparities, colors, pCloud, pose);
 	//segment(disparities, colors, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud), pose);
 	//segment(*disparityImage(dPtr->image), cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud));
 
@@ -206,6 +210,7 @@ void segment(cv::Mat d, cv::Mat c,
 		     Eigen::Isometry3d cameraPose) //, cv::Mat cd)
 {
 	ROS_INFO("Called Segment.");
+	if (!ros::ok()) {return;}
 	ros::Time headerTime = ros::Time::now();
 	tf::StampedTransform transform;
 	tf::TransformEigenToTF(cameraPose, transform);
@@ -260,8 +265,9 @@ void segment(cv::Mat d, cv::Mat c,
 	int count = 0, validCount = 0;
 
 	visualization_msgs::MarkerArray mArray;
-	std::map<long unsigned int, int> spModelLookup;
-	std::vector<Eigen::Vector2i> spCenters;
+	std::map<SuperPixelID, int> spModelLookup;
+	std::vector<Eigen::Vector2i> spCenters;  // centroids in 2d
+	std::vector<Eigen::Vector4f> gCentroids; // centroids in 3d
 	Eigen::MatrixXf Theta = Eigen::MatrixXf::Zero(4, graph.superPixels_.size());
 
 	ROS_INFO("Got SPs.");
@@ -320,7 +326,9 @@ void segment(cv::Mat d, cv::Mat c,
 
 		if (fitPlane[0] != fitPlane[0]) {continue;}
 		if (fabs(fitPlane[0]) < 0.001) {continue;}
-		if (fitPlane[3] < -0.5) {fitPlane = -fitPlane;}
+
+		//TODO do an actual projection into z
+		if (fitPlane[3] > 0.5) {fitPlane = -fitPlane;}
 
 		// Convert to Globals
 		Eigen::VectorXf theta(4);
@@ -347,6 +355,7 @@ void segment(cv::Mat d, cv::Mat c,
 		Eigen::Vector4f gCentroid;
 		if (centroid(3) == 0) {centroid(3) = 1;}
 		gCentroid = cameraFrameTF * centroid;
+		gCentroids.push_back(gCentroid);
 
 		//ROS_INFO_STREAM("centroid:\n" << centroid.matrix().transpose()
 		//		<< "gCentroid:\n" << gCentroid.matrix().transpose());
@@ -356,8 +365,9 @@ void segment(cv::Mat d, cv::Mat c,
 		//		cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
 		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitZ());
 		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]), Eigen::Vector3d::UnitX());
-		Eigen::Quaterniond q = getRotation(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
-
+		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
+		Eigen::Quaterniond q;
+		q.setFromTwoVectors(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
 
 		/********** Generate Marker **********/
 		visualization_msgs::Marker marker;
@@ -374,9 +384,9 @@ void segment(cv::Mat d, cv::Mat c,
 		marker.pose.orientation.y = q.y();//plane[1];
 		marker.pose.orientation.z = q.z();//plane[2];
 		marker.pose.orientation.w = q.w();
-		marker.scale.x = 0.2;
-		marker.scale.y = 0.2;
-		marker.scale.z = 0.2;
+		marker.scale.x = 0.1;
+		marker.scale.y = 0.1;
+		marker.scale.z = 0.1;
 		marker.color.a = 1.0;
 		marker.color.r = 0.0;
 		marker.color.g = 1.0;
@@ -386,42 +396,33 @@ void segment(cv::Mat d, cv::Mat c,
 
 	// Trim Theta
 	Theta.conservativeResize(4, validCount);
-	saveMatrix("theta2.bmat", Theta);
+	//saveMatrix("theta2.bmat", Theta);
 	//ROS_INFO_STREAM("Theta: \n" << Theta.matrix());
-
-	// Save distances
-	Eigen::MatrixXf distances = Theta.row(3);
-	ROS_INFO_STREAM(cameraFrameTF.matrix());
 
 	Eigen::VectorXf weights(4);
 	weights << 1,1,1,4;
-	Eigen::MatrixXf g = getPlanarAdjacencyGraph(graph, Theta, weights, spModelLookup);//getSelfAdjacencyGraph(Theta, 0.5);
-	//ROS_INFO_STREAM("Adjacency Graph: \n" << g);
-	writeOrderedGraph(g, "graph.dot", spCenters);
+	SPGraph g = getPlanarAdjacencyGraph(graph, Theta, weights,
+			spCenters, gCentroids, spModelLookup);//getSelfAdjacencyGraph(Theta, 0.5);
+	//writeOrderedGraph(g, "graph.dot", spCenters);
+
+	std::vector<visualization_msgs::MarkerArray> mArrays;
+	mArrays = GraphVisualization::VisualizeGraph(g);
+
+	nodePub.publish(mArrays[0]);
+	edgePub.publish(mArrays[1]);
+
+
 
 	ROS_INFO("Ready to publish.");
 	sensor_msgs::PointCloud2 msgCloud;
 	pcl::toROSMsg(outCloud, msgCloud);
-	//msgCloud.header.seq = 1;
 	msgCloud.header.frame_id = "segment_result";
 	msgCloud.header.stamp = headerTime;
-
 
 	//ROS_INFO("Cloud Width: %i\tHeight: %i", msgCloud.width, msgCloud.height);
 	superPixelPub.publish(mArray);
 	segCloudPub.publish(msgCloud);
 	ROS_INFO("Published.");
-
-	//contexts.push_back(sc);
-
-	//cv::namedWindow("Result");
-	//cv::setMouseCallback("Result", onMouse, 0);
-	//cv::imshow("Result", overSegmented);
-
-	//cv::waitKey(0);
-
-	//TODO: Better way for this...
-	//numCallbacks--;
 
 	ROS_INFO("Unto the Breach!.");
 	return;

@@ -14,9 +14,15 @@ double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 	// TODO: Add Weight Matrix
 	Eigen::VectorXf delta = (theta2-theta1).cwiseAbs();
 	int size = delta.rows();
-	Eigen::VectorXf error = weights.transpose() * Eigen::MatrixXf::Identity(size,size) * delta;
+	Eigen::VectorXf error = weights.cwiseProduct(delta);
 	double retVal = exp(-(error).squaredNorm() * temperature/2.0);
 	return retVal;
+}
+
+double pMerge(SPNode a, SPNode b, double temperature)
+{
+	// TODO: Add Weight Matrix
+	return pMerge(a.getFullModel(), b.getFullModel(), SPNode::getDefaultWeights(), temperature);
 }
 
 Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf weights, double minP)
@@ -42,7 +48,7 @@ Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf we
 	nnz *= 2;
 	return adjacency;
 }
-
+/*
 Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, Eigen::VectorXf weights, std::map<SuperPixelID, int>& spModelLookup)
 {
 	// TODO: This really should look up the model from the graph itself
@@ -76,6 +82,103 @@ Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, 
 
 	nnz *= 2;
 	return adjacency;
+}
+*/
+
+SPGraph getPlanarAdjacencyGraph(Graph& graph,
+		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
+		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
+		std::map<SuperPixelID, int>& spModelLookup)
+{
+	// TODO: This really should look up the model from the graph itself
+	int n = theta.cols();
+	SPGraph spGraph;
+//	Eigen::MatrixXf adjacency = Eigen::MatrixXf::Zero(n,n);
+
+	std::map<SuperPixelID, SuperPixel*>::iterator sp;
+	std::map<SuperPixelID, int>::iterator ranPlaneModelIdx;
+	std::map<SuperPixelID, SPGraph::vertex_descriptor> graphLookup;
+
+	for (sp = graph.superPixels_.begin(); sp != graph.superPixels_.end(); ++sp)
+	{
+		ranPlaneModelIdx = spModelLookup.find(sp->first);
+		if (ranPlaneModelIdx != spModelLookup.end())
+		{
+			SPGraph::vertex_descriptor v = boost::add_vertex(spGraph);
+			graphLookup.insert(std::pair<SuperPixelID, SPGraph::vertex_descriptor>(sp->first, v));
+			spGraph[v].spid = sp->first;
+			spGraph[v].modelParams = theta.col(ranPlaneModelIdx->second);
+			spGraph[v].position = centroids3[ranPlaneModelIdx->second].topRows(3);
+			spGraph[v].imagePosition = centroids2[ranPlaneModelIdx->second];
+
+			// TODO: Add other parameters
+		}
+	}
+
+
+	for (sp = graph.superPixels_.begin(); sp != graph.superPixels_.end(); ++sp)
+	{
+		ranPlaneModelIdx = spModelLookup.find(sp->first);
+		if (ranPlaneModelIdx != spModelLookup.end())
+		{
+			std::map <SuperPixel*, long double> neighbors = sp->second->neighbors_;
+			std::map <SuperPixel*, long double>::iterator neighbor;
+			for (neighbor = neighbors.begin(); neighbor != neighbors.end(); ++neighbor)
+			{
+				std::map<SuperPixelID, int>::iterator resultB;
+				resultB = spModelLookup.find(neighbor->first->id_);
+				if (resultB != spModelLookup.end())
+				{
+					//int i = resultA->second;
+					//int j = resultB->second;
+					//adjacency(i,j) = pMerge(theta.col(i), theta.col(j), weights, 8);
+
+					// Lookup the vertex descriptors for the given SPIDs
+					SPGraph::vertex_descriptor i = graphLookup.find(sp->first)->second;
+					SPGraph::vertex_descriptor j = graphLookup.find(neighbor->first->id_)->second;
+
+					// Connect the vertices with probability pMerge
+					SPGraph::edge_descriptor e = boost::add_edge(i, j, spGraph).first; // get a new edge
+					spGraph[e].BernoulliProbability = pMerge(theta.col(i), theta.col(j), weights, 8);
+				}
+			}
+
+		}
+	}
+
+	return spGraph;
+}
+
+void mergeNewScanGraph(SPGraph& original, SPGraph& incoming)
+{
+	SPGraph::vertex_iterator vertexItA, vertexEndA;
+	boost::tie(vertexItA, vertexEndA) = boost::vertices(incoming);
+	for (; vertexItA != vertexEndA; ++vertexItA)
+	{
+		SPGraph::vertex_descriptor vertexIDI = *vertexItA; // dereference vertexIt, get the ID
+		SPNode & vertexA = incoming[vertexIDI];
+
+		// add incoming to original
+		SPGraph::vertex_descriptor vertexIDA = boost::add_vertex(original);
+		original[vertexIDA] = vertexA;
+
+		// switch order so we can add incoming as we go...
+
+		SPGraph::vertex_iterator vertexItB, vertexEndB;
+		boost::tie(vertexItB, vertexEndB) = boost::vertices(original);
+		for (; vertexItB != vertexEndB; ++vertexItB)
+		{
+			SPGraph::vertex_descriptor vertexIDB = *vertexItB; // dereference vertexIt, get the ID
+			SPNode & vertexB = original[vertexIDB];
+			double p = pMerge(vertexA, vertexB);
+			if (p > 0.1)
+			{
+				SPGraph::edge_descriptor e = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
+				original[e].BernoulliProbability = p;
+
+			}
+		}
+	}
 }
 
 void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency)
@@ -125,6 +228,25 @@ void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string pr
 
 
 	outfile.close();
+}
+
+void convertAtoG(Eigen::MatrixXf& adjacency, SPGraph& graph)
+{
+	int n = adjacency.cols();
+	for (long i = 0; i < n; i++)
+	{
+		SPNode node;
+		SPGraph::vertex_descriptor vID = boost::add_vertex(node, graph);
+		graph[vID].numPixels = vID;
+	}
+
+	for (long i = 0; i < n; i++)
+	{
+		for (long j = i+1; j < n; j++)
+		{
+
+		}
+	}
 }
 
 void writeOrderedGraph(Eigen::MatrixXf& adjacency, std::string filename, std::vector<Eigen::Vector2i> spCenters, std::string prefix)
