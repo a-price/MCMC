@@ -195,6 +195,7 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	dPtr->image.copyTo(disparities);
 	cPtr->image.copyTo(colors);
 	segment(disparities, colors, pCloud, pose);
+	segment(disparities, colors, pCloud, pose);
 	//segment(disparities, colors, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud), pose);
 	//segment(*disparityImage(dPtr->image), cPtr->image, pcl::PointCloud<pcl::PointXYZ>::Ptr(&pCloud));
 

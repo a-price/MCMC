@@ -35,12 +35,13 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	gttic_(Create_edges);
 	size_t numPixels = smoothed.rows * smoothed.cols;
 	Edge *edges = new Edge[numPixels * 4];
-	createEdges (disparities, smoothed, params, edges);
+	size_t numEdges = createEdges (disparities, smoothed, params, edges);
+
 	gttoc_(Create_edges);
 	std::cerr << "Created Edges." << std::endl;
 	// 3. Perform union-find with the edge weights
 	gttic_(Union_find);
-	universe *u = segment_graph(numPixels, 4 * numPixels, edges,
+	universe *u = segment_graph(numPixels, numEdges, edges,
 			params.weightThreshold_, 0);
 	gttoc_(Union_find);
 	std::cerr << "Graph Segmented." << std::endl;
@@ -51,6 +52,8 @@ void OverSegmentation::overSegment(const cv::Mat& disparities,
 	std::cerr << "SP Created." << std::endl;
 	// 5. Compute the edge probabilities
 	Problem::computeEdgeProbs(graph);
+
+	// TODO: Consider cleaning up memory 
 }
 
 /* ********************************************************************************************** */
@@ -266,32 +269,38 @@ float OverSegmentation::computeWeight(const cv::Mat& disparities,
 }
 
 /* ********************************************************************************************** */
-void OverSegmentation::createEdges (const cv::Mat& disparities, const cv::Mat& smoothed, 
+size_t OverSegmentation::createEdges (const cv::Mat& disparities, const cv::Mat& smoothed, 
 		const OverSegmentationParameters& params, Edge*& edges) {
 
 	int directions[] = { 1, 0, 0, 1, 1, 1, 1, -1 };
-	for (int y = 0, num = 0; y < kHeight; y++) {
+	size_t numEntries = 0;
+	for (int y = 0; y < kHeight; y++) {
 		for (int x = 0; x < kWidth; x++) {
 
 			// Make edges with the 4 neighboring pixels at the RIGHT, BOTTOM, BOTTOM-RIGHT and TOP-RIGHT
-			for (size_t i = 0; i < 4; i++, num++) {
+			for (size_t i = 0; i < 4; i++) {
 
 				// Get the neighbor coordinates and make sure it is within the frame
 				int x2 = x + directions[2 * i], y2 = y + directions[2 * i + 1];
-				if ((x2 >= kWidth) || (y2 >= kHeight))
-					continue;
+				if ((x2 >= kWidth) || (y2 >= kHeight))	continue;
 
 				// Set the vertex indices
-				edges[num].a = y * kWidth + x;
-				edges[num].b = y2 * kWidth + x2;
+				edges[numEntries].a = y * kWidth + x;
+				edges[numEntries].b = y2 * kWidth + x2;
+				assert((edges[numEntries].a >= 0) && (edges[numEntries].b >= 0) && "Can not create edges with < 0 neigh. indices");
 
 				// Set the edge weight
-				edges[num].weight = computeWeight(disparities, smoothed, x, y, x2,
+				edges[numEntries].weight = computeWeight(disparities, smoothed, x, y, x2,
 						y2, params);
+
+				// Increment the counter
+				numEntries++;
 			}
 		}
 	}
 
+	// Return the number of edges
+	return numEntries;
 }
 
 /* ********************************************************************************************** */

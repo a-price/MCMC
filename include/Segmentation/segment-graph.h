@@ -46,6 +46,9 @@ bool operator< (const Edge &a, const Edge &b) {
  */
 universe *segment_graph (int num_vertices, int num_edges, Edge *edges, float c, size_t minForestSize) {
 
+	for(int i = 0; i < num_edges; i++) 
+		assert((edges[i].a >= 0) && (edges[i].b >= 0) && "BAD 2");
+
 	// Sort the edges by ascending weight
 	std::sort(edges, edges + num_edges);
 
@@ -67,8 +70,9 @@ universe *segment_graph (int num_vertices, int num_edges, Edge *edges, float c, 
 		// Get the edge
 		Edge *pedge = &edges[i];
 
-		// Get the two components
+		// Get the two components and sanity check the values
 		int comp1 = pedge->a, comp2 = pedge->b;
+		assert((comp1 >= 0) && (comp2 >= 0) && "Somehow got negative neighor ids");
 
 		// Get the roots of the components
 		int comp1Root = u->find(comp1);

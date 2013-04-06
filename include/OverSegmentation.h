@@ -49,7 +49,8 @@ public:
 	// These functions focus on the union-find operation
 
 	/// Creates the edges from the disparity and color (possible smoothed) images
-	static void createEdges (const cv::Mat& disparities, const cv::Mat& smoothed, 
+	/// and returns the number of edges 
+	static size_t createEdges (const cv::Mat& disparities, const cv::Mat& smoothed, 
 			const OverSegmentationParameters& params, Edge*& edges);
 
 	/// Computes the pixel distance using the spatial, disparity and distance options.
