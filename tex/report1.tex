@@ -1,0 +1,49 @@
+\documentclass[10pt,letterpaper]{report}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{pdflscape}
+\usepackage{geometry}
+\usepackage{array}
+
+\DeclareMathOperator*{\argmax}{arg\!max}
+
+\author{Andrew Price}
+\title{Modeling Generalized Swendsen-Wang Cuts for RGB-D Image Sets}
+
+\begin{document}
+\maketitle
+	\newgeometry{left=1cm,top=1cm,bottom=1cm,right=1cm}	
+	\begin{landscape}
+	Let's begin by going over some of the nomenclature from the generalized S-W paper to make sure we've defined all our terms and extensions very clearly:
+	\begin{center}
+	\renewcommand{\arraystretch}{1.5}
+	\begin{tabular}{|c| >{\centering\arraybackslash}m{4cm}|>{\centering\arraybackslash}m{6cm}|p{9.5cm}|}
+\hline 
+Variable & Range/Conditions & Name & Description \\ \hline 
+$I_t$ &  & RGB-D Image at time $t$ & This represents the stream of images to be segmented \\ \hline
+$G<V,E>$ & $V={v_1,v_2,\ldots,v_N}$ & A Graph containing vertices $V$ and edges $E$ & This is the general structure we will use to encode adjacency relationships within an Image $I$ \\ \hline
+$\pi_n=(V_1,V_2,\ldots,V_n)$ & \begin{tabular}{c}
+$\bigcup_{i=1}^{n}V_i=V$ \\
+$V_i\bigcap{V_j}=\emptyset,\forall{i}\neq{j}$\end{tabular} & A partition with $n$ segments & A partition is an assignment of each edge $E$ in graph $G'$ to either "on" or "off". An atomic region must exist uniquely in a segment. \\ \hline
+$l\in{L}$ & L=\{planar, cylindrical, spherical, spline, etc.\} & The model family for a region & The model family refers to what sort of surface we think a region contains, e.g. plane, sphere, spline, etc. For the time being, this is assumed to be planar for all regions. \\ \hline
+$\theta_i$ & $i=1,2,\ldots,n$ & The model parameters for a region & These are the coefficients for the given model type. For the plane model, these are the coefficients from the plane equation $ax+by+cz=d$. \\ \hline
+$c_i=(l_i,\theta_i)$ & $i=1,2,\ldots,n$ & The full model for a region & Combination of family and parameters. Eventually, we would like to explore these variables as well, using Data-Driven MCMC \\ \hline
+$W=(n,\pi_n,c_1,c_2,\ldots,c_n)$ &  & The full world description & This is the function we are trying to optimize via $W^*={\argmax}_{W\in\Omega} P(I|W)P(W)$. For our problem, the search space $\Omega$ is very large, with $\Omega=\bigcup_{n=1}^{|V|}\{\Omega_{\pi_n} \times\Omega_{l}^n \times\Omega_{\theta_1} \times\Omega_{\theta_2},\ldots, \times\Omega_{\theta_n}\}$ \\ \hline 
+$G_t$ & & The adjacency graph for the image at time $t$ & \\ \hline
+$G'_t$ &  & The world graph incorporating all images up to time $t$ & \\ \hline
+$V'_t=V'_{t-1}{\bigcup}V_t$ &  & Set of vertices at time $t$ $t$ &  \\ \hline
+$E'_t=E'_{t-1}{\bigcup}E_t{\bigcup}E(c'_i,c_j)$ & \begin{tabular}{c}
+$i=1,2,\ldots,\sum_{\tau=1}^{t-1}{N_\tau}$ \\
+$j=1,2,\ldots,N_t$
+\end{tabular} & Set of edges at time $t$ & \\ \hline
+$q_e=P(\mu_e=on|c_i,c_j)$ & $e\in{E}$ & Discriminative probability on edge $e$. & $\mu_e$ is a binary random variable following a Bernoulli distribution and describing the probability of two adjacent vertices in $G'_0(t)$ being connected in a given step. \\ \hline
+
+	\end{tabular}
+	\end{center}
+	\end{landscape}
+	\restoregeometry
+\end{document}
