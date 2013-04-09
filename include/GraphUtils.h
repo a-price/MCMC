@@ -26,14 +26,16 @@ Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf we
 SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
 		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
-		std::map<SuperPixelID, int>& spModelLookup);
+		std::map<SuperPixelID, int>& spModelLookup, double mergeThreshold=0.0);
 
-void mergeNewScanGraph(SPGraph& original, SPGraph& incoming);
+void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold=0.1);
 
 void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency);
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix = "a");
 
 void writeOrderedGraph(Eigen::MatrixXf& adjacency, std::string filename, std::vector<Eigen::Vector2i> spCenters, std::string prefix = "a");
+
+SPGraph generateSampleGraph();
 
 #endif /* GRAPHUTILS_H_ */

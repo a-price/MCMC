@@ -22,7 +22,7 @@ double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 double pMerge(SPNode a, SPNode b, double temperature)
 {
 	// TODO: Add Weight Matrix
-	return pMerge(a.getFullModel(), b.getFullModel(), SPNode::getDefaultWeights(), temperature);
+	return pMerge(a.getFullModel(), b.getFullModel(), a.getDefaultWeights(), temperature);
 }
 
 Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf weights, double minP)
@@ -88,7 +88,7 @@ Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, 
 SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
 		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
-		std::map<SuperPixelID, int>& spModelLookup)
+		std::map<SuperPixelID, int>& spModelLookup, double mergeThreshold)
 {
 	// TODO: This really should look up the model from the graph itself
 	int n = theta.cols();
@@ -139,7 +139,12 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 
 					// Connect the vertices with probability pMerge
 					SPGraph::edge_descriptor e = boost::add_edge(i, j, spGraph).first; // get a new edge
-					spGraph[e].BernoulliProbability = pMerge(theta.col(i), theta.col(j), weights, 8);
+					double p = pMerge(theta.col(i), theta.col(j), weights, 8);
+
+					if (p > mergeThreshold)
+					{
+						spGraph[e].BernoulliProbability = p;
+					}
 				}
 			}
 
@@ -149,18 +154,24 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 	return spGraph;
 }
 
-void mergeNewScanGraph(SPGraph& original, SPGraph& incoming)
+void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold)
 {
+	std::map<SPGraph::vertex_descriptor, SPGraph::vertex_descriptor> newNodeIDs;
+
+	// add new nodes to the graph and compute edges as we go
 	SPGraph::vertex_iterator vertexItA, vertexEndA;
 	boost::tie(vertexItA, vertexEndA) = boost::vertices(incoming);
 	for (; vertexItA != vertexEndA; ++vertexItA)
 	{
 		SPGraph::vertex_descriptor vertexIDI = *vertexItA; // dereference vertexIt, get the ID
-		SPNode & vertexA = incoming[vertexIDI];
+		SPNode& vertexA = incoming[vertexIDI];
 
 		// add incoming to original
 		SPGraph::vertex_descriptor vertexIDA = boost::add_vertex(original);
 		original[vertexIDA] = vertexA;
+
+		// add to lookup
+		newNodeIDs.insert(std::pair<SPGraph::vertex_descriptor, SPGraph::vertex_descriptor>(vertexIDI, vertexIDA));
 
 		// switch order so we can add incoming as we go...
 
@@ -169,14 +180,38 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming)
 		for (; vertexItB != vertexEndB; ++vertexItB)
 		{
 			SPGraph::vertex_descriptor vertexIDB = *vertexItB; // dereference vertexIt, get the ID
-			SPNode & vertexB = original[vertexIDB];
+			SPNode& vertexB = original[vertexIDB];
 			double p = pMerge(vertexA, vertexB);
-			if (p > 0.1)
+
+			if (p > mergeThreshold)
 			{
 				SPGraph::edge_descriptor e = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
 				original[e].BernoulliProbability = p;
 
 			}
+		}
+	}
+
+	// relink original edges from incoming graph
+	boost::tie(vertexItA, vertexEndA) = boost::vertices(incoming);
+	for (; vertexItA != vertexEndA; ++vertexItA)
+	{
+		SPGraph::vertex_descriptor vertexIDI = *vertexItA;
+		SPGraph::vertex_descriptor vertexIDA = newNodeIDs.find(vertexIDI)->second;
+
+		// link through all neighbor vertices
+		SPGraph::out_edge_iterator outEdgeIt, outEdgeEnd;
+		boost::tie(outEdgeIt, outEdgeEnd) = boost::out_edges(vertexIDI, incoming);
+		for (; outEdgeIt != outEdgeEnd; ++outEdgeIt)
+		{
+			SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, incoming);
+			SPGraph::vertex_descriptor vertexIDB = newNodeIDs.find(neighborID)->second;
+			SPGraph::edge_descriptor oldE = boost::edge(vertexIDI, neighborID, incoming).first;
+
+			// todo check for existing
+
+			SPGraph::edge_descriptor newE = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
+			original[newE].BernoulliProbability = incoming[oldE].BernoulliProbability;
 		}
 	}
 }
@@ -281,4 +316,58 @@ void writeOrderedGraph(Eigen::MatrixXf& adjacency, std::string filename, std::ve
 
 
 	outfile.close();
+}
+
+SPGraph generateSampleGraph()
+{
+	SPGraph graph;
+
+	for(int i = 0; i < 8; i++)
+	{
+		SPGraph::vertex_descriptor v = boost::add_vertex(graph);
+
+		// Creates a cube of side length size
+		float size = 0.5;
+		Eigen::Vector3f pos;
+		pos << (size * ((i & 0x4) ? -1 : 1)),
+			(size * ((i & 0x2) ? -1 : 1)),
+			(size * ((i & 0x1) ? -1 : 1));
+
+		Eigen::Vector4f theta;
+		theta << pos[0],-pos[1],pos[2],1;
+
+		std::cerr << pos.transpose() << std::endl;
+		graph[v].position = pos;
+		//std::cerr << graph[v].position.transpose() << std::endl;
+		graph[v].modelParams = theta;
+
+	}
+
+
+	SPEdge edge;
+	// Draw strong lines between top nodes
+	for (int i = 0; i < 4; i++)
+	{
+		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i, (i+1)%4, graph);
+		SPGraph::edge_descriptor eID = e.first;
+		graph[eID].BernoulliProbability = 0.9;
+	}
+
+	// Draw medium lines between levels
+	for (int i = 0; i < 4; i++)
+	{
+		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i, i+4, graph);
+		SPGraph::edge_descriptor eID = e.first;
+		graph[eID].BernoulliProbability = 0.5;
+	}
+
+	// Draw weak lines around bottom nodes
+	for (int i = 0; i < 4; i++)
+	{
+		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i+4, ((i+1)%4)+4, graph);
+		SPGraph::edge_descriptor eID = e.first;
+		graph[eID].BernoulliProbability = 0.2;
+	}
+
+	return graph;
 }

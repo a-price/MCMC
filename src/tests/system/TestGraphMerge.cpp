@@ -1,5 +1,5 @@
 /**
- * \file TestGraphVisualization.cpp
+ * \file TestGraphMerge.cpp
  * \brief 
  *
  *  \date Apr 5, 2013
@@ -20,8 +20,25 @@ int main(int argc, char** argv)
 	ros::Publisher nodePub;
 	ros::Publisher edgePub;
 
-	SPGraph graph = generateSampleGraph();
+	std::cerr << "started.\n";
+	SPGraph graph;
+	SPGraph graph1 = generateSampleGraph();
+	SPGraph graph2 = generateSampleGraph();
 
+	std::cerr << "got sample graphs.\n";
+	SPGraph::vertex_iterator vertexItA, vertexEndA;
+	boost::tie(vertexItA, vertexEndA) = boost::vertices(graph2);
+	for (; vertexItA != vertexEndA; ++vertexItA)
+	{
+		graph2[*vertexItA].position[0]++;
+	}
+
+
+	std::cerr << "about to merge.\n";
+	mergeNewScanGraph(graph, graph1);
+	mergeNewScanGraph(graph, graph2);
+
+	std::cerr << "merged.\n";
 	nodePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_nodes", 0 );
 	edgePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_edges", 0 );
 

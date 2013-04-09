@@ -184,7 +184,7 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 
 		eMarker.scale.z = 0; // remove head?
 
-		float lineScale = 0.075;
+		float lineScale = 0.025;
 		// We have to use a line list marker here, so all lines are part of the same marker
 		if (edge.BernoulliProbability > 0.75)
 		{

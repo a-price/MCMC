@@ -15,7 +15,7 @@
 \title{Modeling Generalized Swendsen-Wang Cuts for RGB-D Image Sets}
 
 \begin{document}
-\maketitle
+%\maketitle
 	\newgeometry{left=1cm,top=1cm,bottom=1cm,right=1cm}	
 	\begin{landscape}
 	Let's begin by going over some of the nomenclature from the generalized S-W paper to make sure we've defined all our terms and extensions very clearly:
@@ -35,12 +35,13 @@ $c_i=(l_i,\theta_i)$ & $i=1,2,\ldots,n$ & The full model for a region & Combinat
 $W=(n,\pi_n,c_1,c_2,\ldots,c_n)$ &  & The full world description & This is the function we are trying to optimize via $W^*={\argmax}_{W\in\Omega} P(I|W)P(W)$. For our problem, the search space $\Omega$ is very large, with $\Omega=\bigcup_{n=1}^{|V|}\{\Omega_{\pi_n} \times\Omega_{l}^n \times\Omega_{\theta_1} \times\Omega_{\theta_2},\ldots, \times\Omega_{\theta_n}\}$ \\ \hline 
 $G_t$ & & The adjacency graph for the image at time $t$ & \\ \hline
 $G'_t$ &  & The world graph incorporating all images up to time $t$ & \\ \hline
-$V'_t=V'_{t-1}{\bigcup}V_t$ &  & Set of vertices at time $t$ $t$ &  \\ \hline
-$E'_t=E'_{t-1}{\bigcup}E_t{\bigcup}E(c'_i,c_j)$ & \begin{tabular}{c}
-$i=1,2,\ldots,\sum_{\tau=1}^{t-1}{N_\tau}$ \\
-$j=1,2,\ldots,N_t$
+$V'_t=V'_{t-1}{\bigcup}V_t$ &  & Set of vertices at time $t$ &  \\ \hline
+$E'_t=E'_{t-1}{\bigcup}E_t{\bigcup}E(\rho'_s,rho_k)$ & \begin{tabular}{c}
+$s=1,2,\ldots,\sum_{\tau=1}^{t-1}{N_\tau}$ \\
+$K=1,2,\ldots,N_t$
 \end{tabular} & Set of edges at time $t$ & \\ \hline
 $q_e=P(\mu_e=on|c_i,c_j)$ & $e\in{E}$ & Discriminative probability on edge $e$. & $\mu_e$ is a binary random variable following a Bernoulli distribution and describing the probability of two adjacent vertices in $G'_0(t)$ being connected in a given step. \\ \hline
+$E'_t(\pi)\subset{E'_t}$ &  & Set of edges turned on for partition $\pi$ at time $t$ &  \\ \hline
 
 	\end{tabular}
 	\end{center}

@@ -28,16 +28,16 @@ public:
 
 	Eigen::VectorXf getFullModel()
 	{
-		Eigen::VectorXf retVal;
+		Eigen::VectorXf retVal(modelParams.rows()+position.rows());
 		retVal << modelParams, position;
 		return retVal;
 	}
 
-	static Eigen::VectorXf getDefaultWeights()
+	Eigen::VectorXf getDefaultWeights()
 	{
-		Eigen::VectorXf retVal;
-		retVal << 1.0,1.0,1.0,4.0,
-				0.25,0.25,0.25;
+		Eigen::VectorXf retVal(modelParams.rows()+position.rows());
+		retVal << 1.0,1.0,1.0,10.0,
+				0.5,0.5,0.5;
 		return retVal;
 	}
 };

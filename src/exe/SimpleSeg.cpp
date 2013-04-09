@@ -36,6 +36,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 
 // Segmentation includes...
 //#include "InteractiveSegmenter.h"
@@ -77,6 +78,7 @@ tf::TransformBroadcaster* broadcaster;
 std::vector<SegmentationContext> contexts;
 volatile int contextNum = -1;
 
+SPGraph spGraph;
 OverSegmentationParameters params;
 
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points);
@@ -156,13 +158,16 @@ int main(int argc, char** argv)
 }
 
 
-
-const int maxCallbacks = 2;
+const int callbackInterval = 4;
+const int maxCallbacks = 6;
 int numCallbacks = 0;
+int numTotalCallbacks = 0;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points)
 {
 	ROS_INFO("Got Callback. Sensor Frame: %s", points->header.frame_id.c_str());
-	if (numCallbacks < maxCallbacks && ros::ok())
+
+	numTotalCallbacks++;
+	if (numCallbacks < maxCallbacks && (numTotalCallbacks % callbackInterval) == 0 && ros::ok())
 	{
 		numCallbacks++;
 	}
@@ -174,7 +179,8 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 
 	cv_bridge::CvImagePtr cPtr = cv_bridge::toCvCopy(color, "bgr8");
 	cv_bridge::CvImagePtr dPtr = cv_bridge::toCvCopy(depth, "mono8");
-	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZ>); // no color in this topic?
+	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudF (new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromROSMsg(*points, *pCloud);
 
 	tf::StampedTransform transform;
@@ -195,6 +201,15 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	}
 
 	ROS_INFO("Got Cloud.");
+
+	// Remove outlier points as noise
+//	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+//	sor.setInputCloud (pCloud);
+//	sor.setMeanK (20);
+//	ROS_INFO("Called a.");
+//	sor.setStddevMulThresh (2.0);
+//	sor.filter (*pCloudF);
+//	ROS_INFO("Called b.");
 
 	// TODO:convert to disparity?
 	dPtr->image.copyTo(disparities);
@@ -280,10 +295,11 @@ void segment(cv::Mat d, cv::Mat c,
 		// Get ID
 		idName = std::to_string((long unsigned int)(iter->first));
 
-		ROS_DEBUG("Getting Indices.");
+//		ROS_INFO("Getting Indices.");
 		// Get central pixel (middle?)
 		int len = iter->second->A_->rows();
-		if (len < 1) {continue;}
+//		ROS_INFO("A");
+		if (len < 25) {continue;}
 		pcl::PointIndices::Ptr inliers(new pcl::PointIndices ());
 		for (int i = 0; i < len; i++)
 		{
@@ -292,17 +308,22 @@ void segment(cv::Mat d, cv::Mat c,
 
 			int idx = u + (v * pCloud->width);
 			inliers->indices.push_back(idx);
-
+//			ROS_INFO("%i", i);
 
 			//cv::Vec3f pixel = colors.at<cv::Vec3f>(v,u);
 			cv::Vec3b pixel = overSegmented.at<cv::Vec3b>(v,u);
+//			ROS_INFO("a");
+//			std::cerr << "point info: " << u << "," << v << ">" << idx << "," << pCloud->points.size() << std::endl;
 			pcl::PointXYZ point = pCloud->points[idx];
+//			ROS_INFO("b");
 			pcl::PointXYZRGB sPoint;
 			sPoint.x = point.x; sPoint.y = point.y; sPoint.z = point.z;
+//			ROS_INFO("c");
 			sPoint.b = pixel[0]; sPoint.g = pixel[1]; sPoint.r = pixel[2];
+//			ROS_INFO("d");
 			outCloud.points.push_back(sPoint);
 		}
-		ROS_DEBUG("Got Indices.");
+		ROS_INFO("Got Indices.");
 
 		/********** Get Subset **********/
 		pcl::ExtractIndices<pcl::PointXYZ> extract;
@@ -402,11 +423,13 @@ void segment(cv::Mat d, cv::Mat c,
 	Eigen::VectorXf weights(4);
 	weights << 1,1,1,4;
 	SPGraph g = getPlanarAdjacencyGraph(graph, Theta, weights,
-			spCenters, gCentroids, spModelLookup);//getSelfAdjacencyGraph(Theta, 0.5);
+			spCenters, gCentroids, spModelLookup, 0.4);//getSelfAdjacencyGraph(Theta, 0.5);
 	//writeOrderedGraph(g, "graph.dot", spCenters);
 
+	mergeNewScanGraph(spGraph, g, 0.4);
+
 	std::vector<visualization_msgs::MarkerArray> mArrays;
-	mArrays = GraphVisualization::VisualizeGraph(g);
+	mArrays = GraphVisualization::VisualizeGraph(spGraph);
 
 	nodePub.publish(mArrays[0]);
 	edgePub.publish(mArrays[1]);
