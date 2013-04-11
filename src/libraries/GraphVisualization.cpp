@@ -2,8 +2,8 @@
  * \file GraphVisualization.cpp
  * \brief 
  *
- *  \date Apr 5, 2013
- *  \author arprice
+ * \date Apr 5, 2013
+ * \author arprice
  */
 
 #include "GraphVisualization.h"
@@ -72,85 +72,6 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 
 
 	/********** Generate Edge Markers **********/
-	/*
-	visualization_msgs::Marker strong;
-	strong.header.frame_id = "world";
-	strong.ns = "MCMC";
-	strong.type = visualization_msgs::Marker::SPHERE_LIST;
-	strong.action = visualization_msgs::Marker::ADD;
-	//strong.pose.position.x = 1;
-	//strong.pose.position.y = 0;
-	//strong.pose.position.z = 0;
-	strong.color.r = 0.75; // based on parent
-	strong.color.g = 0.75; //
-	strong.color.b = 0.0;
-
-	visualization_msgs::Marker moderate(strong);
-	visualization_msgs::Marker weak(strong);
-	visualization_msgs::Marker faint(strong);
-
-	strong.scale.x = 1;
-	moderate.scale.x = .5;
-	weak.scale.x = .25;
-	faint.scale.x = .1;
-
-	strong.id=50;
-	moderate.id=51;
-	weak.id=52;
-	faint.id=53;
-
-	strong.color.a = 0.9;
-	moderate.color.a = 0.5;
-	weak.color.a = 0.25;
-	faint.color.a = 0.1;
-
-
-	SPGraph::edge_iterator edgeIt, edgeEnd;
-	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
-	for (; edgeIt != edgeEnd; ++edgeIt)
-	{
-		SPGraph::edge_descriptor edgeID = *edgeIt; // dereference edgeIt, get the ID
-		SPEdge & edge = graph[edgeID];
-
-		SPNode & a = graph[boost::source(edgeID, graph)];
-		SPNode & b = graph[boost::target(edgeID, graph)];
-
-		geometry_msgs::Point pa, pb;
-		std::cout << a.position.transpose() << "\t" << b.position.transpose() << std::endl;
-		pa.x=a.position[0]; pa.x=a.position[1]; pa.x=a.position[2];
-		pb.x=b.position[0]; pb.x=b.position[1]; pb.x=b.position[2];
-
-		// We have to use a line list marker here, so all lines are part of the same marker
-		if (edge.BernoulliProbability > 0.75)
-		{
-			strong.points.push_back(pa);
-			strong.points.push_back(pb);
-			std::cout << "Strong!" << std::endl;
-		}
-		else if (edge.BernoulliProbability <= 0.75 && edge.BernoulliProbability > 0.25)
-		{
-			moderate.points.push_back(pa);
-			moderate.points.push_back(pb);
-			std::cout << "Moderate!" << std::endl;
-		}
-		else if (edge.BernoulliProbability <= 0.25 && edge.BernoulliProbability > 0.05)
-		{
-			weak.points.push_back(pa);
-			weak.points.push_back(pb);
-			std::cout << "Weak!" << std::endl;
-		}
-		else if (edge.BernoulliProbability <= 0.05)
-		{
-			faint.points.push_back(pa);
-			faint.points.push_back(pb);
-		}
-	}
-	visualization_msgs::MarkerArray lines;
-	lines.markers.push_back(strong);
-	lines.markers.push_back(moderate);
-	lines.markers.push_back(weak);
-	lines.markers.push_back(faint);*/
-
 	visualization_msgs::MarkerArray qs;
 	int idIdx = 0;
 	SPGraph::edge_iterator edgeIt, edgeEnd;
@@ -164,16 +85,23 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 		SPNode & b = graph[boost::target(edgeID, graph)];
 
 		geometry_msgs::Point pa, pb;
-		std::cout << a.position.transpose() << "\t" << b.position.transpose() << std::endl;
 		pa.x=a.position[0]; pa.y=a.position[1]; pa.z=a.position[2];
 		pb.x=b.position[0]; pb.y=b.position[1]; pb.z=b.position[2];
 
 		visualization_msgs::Marker eMarker;
-		eMarker.header.frame_id = "world";
+		eMarker.header.frame_id = "/world";
 		eMarker.ns = "MCMC";
 		eMarker.id = idIdx++;
 		eMarker.type = visualization_msgs::Marker::ARROW;
-		eMarker.action = visualization_msgs::Marker::ADD;
+
+		if (edge.partitionOn)
+		{
+			eMarker.action = visualization_msgs::Marker::ADD;
+		}
+		else
+		{
+			eMarker.action = visualization_msgs::Marker::DELETE;
+		}
 
 		eMarker.color.r = 0.75; //
 		eMarker.color.g = 0.75; //
@@ -189,17 +117,14 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 		if (edge.BernoulliProbability > 0.75)
 		{
 			eMarker.scale.x = lineScale * 1.0;
-			std::cout << "Strong!" << std::endl;
 		}
 		else if (edge.BernoulliProbability <= 0.75 && edge.BernoulliProbability > 0.25)
 		{
 			eMarker.scale.x = lineScale * 0.5;
-			std::cout << "Moderate!" << std::endl;
 		}
 		else if (edge.BernoulliProbability <= 0.25 && edge.BernoulliProbability > 0.05)
 		{
 			eMarker.scale.x = lineScale * 0.25;
-			std::cout << "Weak!" << std::endl;
 		}
 		else if (edge.BernoulliProbability <= 0.05)
 		{
@@ -208,7 +133,6 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 		eMarker.scale.y = eMarker.scale.x;
 		qs.markers.push_back(eMarker);
 	}
-
 
 	mArrays.push_back(qs);
 

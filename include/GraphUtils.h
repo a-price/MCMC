@@ -14,6 +14,8 @@
 #include <map>
 #include "SPGraph.h"
 
+double randbetween(double min, double max);
+
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights = Eigen::Vector4f::Ones(), double temperature=8);
 
@@ -29,6 +31,8 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		std::map<SuperPixelID, int>& spModelLookup, double mergeThreshold=0.0);
 
 void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold=0.1);
+
+void getNewConnectedSets(SPGraph& graph);
 
 void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency);
 

@@ -1,8 +1,8 @@
 /**
- * \file TestGraphMerge.cpp
+ * \file TestGraphConnectedSets.cpp
  * \brief 
  *
- *  \date Apr 5, 2013
+ *  \date Apr 10, 2013
  *  \author arprice
  */
 
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 	ros::Publisher edgePub;
 
 	std::cerr << "started.\n";
-	SPGraph graph;
+	SPGraph graph;// = generateSampleGraph();
 	SPGraph graph1 = generateSampleGraph();
 	SPGraph graph2 = generateSampleGraph();
 
@@ -44,15 +44,17 @@ int main(int argc, char** argv)
 	edgePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_edges", 0 );
 
 	std::vector<visualization_msgs::MarkerArray> mArrays;
-	mArrays = GraphVisualization::VisualizeGraph(graph);
-	ROS_ASSERT(mArrays[1].markers.size() == 4);
-	ROS_ASSERT(mArrays[1].markers[0].points.size() == 4);
+
 
 	ros::Rate rate(.25);
 	while(ros::ok())
 	{
+		getNewConnectedSets(graph);
+		mArrays = GraphVisualization::VisualizeGraph(graph);
+
 		nodePub.publish(mArrays[0]);
 		edgePub.publish(mArrays[1]);
+
 		ros::spinOnce();
 		rate.sleep();
 	}

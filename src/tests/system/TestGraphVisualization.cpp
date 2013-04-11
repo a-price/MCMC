@@ -2,8 +2,8 @@
  * \file TestGraphVisualization.cpp
  * \brief 
  *
- *  \date Apr 5, 2013
- *  \author arprice
+ * \date Apr 5, 2013
+ * \author arprice
  */
 
 #include <ros/ros.h>

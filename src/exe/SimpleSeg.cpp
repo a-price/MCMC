@@ -4,13 +4,8 @@
 #include <stdio.h>
 
 #include <ros/ros.h>
-//#include <rosbag/bag.h>
-//#include <rosbag/view.h>
-
-//#include <boost/foreach.hpp>
 
 #include <message_filters/subscriber.h>
-//#include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <sensor_msgs/Image.h>
@@ -58,6 +53,9 @@
 #include "GraphUtils.h"
 #include "MatUtils.h"
 #include "GraphVisualization.h"
+
+#include <boost/archive/text_oarchive.hpp>
+//#include <boost/archive/binary_oarchive.hpp>
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -77,6 +75,7 @@ tf::TransformListener* listener;
 tf::TransformBroadcaster* broadcaster;
 std::vector<SegmentationContext> contexts;
 volatile int contextNum = -1;
+volatile bool graphWritten = false;
 
 SPGraph spGraph;
 OverSegmentationParameters params;
@@ -147,11 +146,6 @@ int main(int argc, char** argv)
 
 	sync_.registerCallback(boost::bind(&kinectCallback, _1, _2, _3));
 
-	//ros::CallbackQueue my_queue;
-	//nh_.setCallbackQueue(&my_queue);
-	//my_queue.callOne(ros::WallDuration());
-	//ROS_INFO("Finished");
-	//return 0;
 	ros::spin();
 #endif
 
@@ -170,6 +164,21 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	if (numCallbacks < maxCallbacks && (numTotalCallbacks % callbackInterval) == 0 && ros::ok())
 	{
 		numCallbacks++;
+	}
+	else if (numCallbacks == maxCallbacks && !graphWritten && ros::ok())
+	{
+	    // create and open a character archive for output
+	    std::ofstream ofs("test.big");
+	    std::cout << "Writing graph to file...\n";
+
+	    // save data to archive
+	    {
+	        boost::archive::text_oarchive oa(ofs);
+	        // write class instance to archive
+	        oa << spGraph;
+	        // archive and stream closed when destructors are called
+	    }
+	    graphWritten = true;
 	}
 	else
 	{
@@ -323,7 +332,7 @@ void segment(cv::Mat d, cv::Mat c,
 //			ROS_INFO("d");
 			outCloud.points.push_back(sPoint);
 		}
-		ROS_INFO("Got Indices.");
+		//ROS_INFO("Got Indices.");
 
 		/********** Get Subset **********/
 		pcl::ExtractIndices<pcl::PointXYZ> extract;
@@ -435,7 +444,6 @@ void segment(cv::Mat d, cv::Mat c,
 	edgePub.publish(mArrays[1]);
 
 
-
 	ROS_INFO("Ready to publish.");
 	sensor_msgs::PointCloud2 msgCloud;
 	pcl::toROSMsg(outCloud, msgCloud);
@@ -446,8 +454,6 @@ void segment(cv::Mat d, cv::Mat c,
 	superPixelPub.publish(mArray);
 	segCloudPub.publish(msgCloud);
 	ROS_INFO("Published.");
-
-	ROS_INFO("Unto the Breach!.");
 	return;
 }
 

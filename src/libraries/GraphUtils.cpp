@@ -8,6 +8,11 @@
 
 #include "GraphUtils.h"
 
+double randbetween(double min, double max)
+{
+	return (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
+}
+
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights, double temperature)
 {
@@ -48,42 +53,6 @@ Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf we
 	nnz *= 2;
 	return adjacency;
 }
-/*
-Eigen::MatrixXf getPlanarAdjacencyGraph(Graph& spGraph, Eigen::MatrixXf& theta, Eigen::VectorXf weights, std::map<SuperPixelID, int>& spModelLookup)
-{
-	// TODO: This really should look up the model from the graph itself
-	int n = theta.cols();
-	int nnz = 0;
-	Eigen::MatrixXf adjacency = Eigen::MatrixXf::Zero(n,n);
-
-	std::map<SuperPixelID, SuperPixel*>::iterator sp;
-	std::map<SuperPixelID, int>::iterator resultA;
-	for (sp = spGraph.superPixels_.begin(); sp != spGraph.superPixels_.end(); ++sp)
-	{
-		resultA = spModelLookup.find(sp->first);
-		if (resultA != spModelLookup.end())
-		{
-			std::map <SuperPixel*, long double> neighbors = sp->second->neighbors_;
-			std::map <SuperPixel*, long double>::iterator neighbor;
-			for (neighbor = neighbors.begin(); neighbor != neighbors.end(); ++neighbor)
-			{
-				std::map<SuperPixelID, int>::iterator resultB;
-				resultB = spModelLookup.find(neighbor->first->id_);
-				if (resultB != spModelLookup.end())
-				{
-					int i = resultA->second;
-					int j = resultB->second;
-					adjacency(i,j) = pMerge(theta.col(i), theta.col(j), weights, 8);
-				}
-			}
-
-		}
-	}
-
-	nnz *= 2;
-	return adjacency;
-}
-*/
 
 SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
@@ -93,7 +62,6 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 	// TODO: This really should look up the model from the graph itself
 	int n = theta.cols();
 	SPGraph spGraph;
-//	Eigen::MatrixXf adjacency = Eigen::MatrixXf::Zero(n,n);
 
 	std::map<SuperPixelID, SuperPixel*>::iterator sp;
 	std::map<SuperPixelID, int>::iterator ranPlaneModelIdx;
@@ -144,6 +112,7 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 					if (p > mergeThreshold)
 					{
 						spGraph[e].BernoulliProbability = p;
+						spGraph[e].partitionOn = true;
 					}
 				}
 			}
@@ -180,6 +149,10 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 		for (; vertexItB != vertexEndB; ++vertexItB)
 		{
 			SPGraph::vertex_descriptor vertexIDB = *vertexItB; // dereference vertexIt, get the ID
+
+			// Prevent self-loops
+			if (vertexIDA == vertexIDB) {continue;}
+
 			SPNode& vertexB = original[vertexIDB];
 			double p = pMerge(vertexA, vertexB);
 
@@ -187,7 +160,7 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 			{
 				SPGraph::edge_descriptor e = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
 				original[e].BernoulliProbability = p;
-
+				original[e].partitionOn = true;
 			}
 		}
 	}
@@ -208,12 +181,28 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 			SPGraph::vertex_descriptor vertexIDB = newNodeIDs.find(neighborID)->second;
 			SPGraph::edge_descriptor oldE = boost::edge(vertexIDI, neighborID, incoming).first;
 
-			// todo check for existing
-
 			SPGraph::edge_descriptor newE = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
 			original[newE].BernoulliProbability = incoming[oldE].BernoulliProbability;
 		}
 	}
+}
+
+void getNewConnectedSets(SPGraph& graph)
+{
+	int count = 0;
+	SPGraph::edge_iterator edgeIt, edgeEnd;
+	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
+	for (; edgeIt != edgeEnd; ++edgeIt)
+	{
+		SPEdge & edge = graph[*edgeIt];
+
+		//std::cout << boost::source(*edgeIt, graph) << "->" << boost::target(*edgeIt, graph) << " ";
+
+		edge.partitionOn = (randbetween(0,1) <= edge.BernoulliProbability);
+		//std::cout << "set edge: " << edge.partitionOn << "\t";
+		if (edge.partitionOn) {count ++;}
+	}
+	std::cout << "set " << count << " edges of " << graph.m_edges.size() << " to true.\n";
 }
 
 void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency)
@@ -336,7 +325,7 @@ SPGraph generateSampleGraph()
 		Eigen::Vector4f theta;
 		theta << pos[0],-pos[1],pos[2],1;
 
-		std::cerr << pos.transpose() << std::endl;
+		//std::cerr << pos.transpose() << std::endl;
 		graph[v].position = pos;
 		//std::cerr << graph[v].position.transpose() << std::endl;
 		graph[v].modelParams = theta;
