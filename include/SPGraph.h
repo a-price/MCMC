@@ -3,7 +3,7 @@
  * \brief 
  *
  *  \date Apr 4, 2013
- *  \author arprice
+ *  \author Andrew Price
  */
 
 #ifndef SPGRAPH_H_
@@ -14,6 +14,8 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/graph/adj_list_serialize.hpp>
+#include <boost/graph/filtered_graph.hpp>
+#include <boost/graph/connected_components.hpp>
 
 #include "Graph.h"
 
@@ -89,13 +91,18 @@ public:
 
 typedef boost::adjacency_list<boost::setS, boost::vecS, boost::undirectedS, SPNode, SPEdge> SPGraph;
 
-
-class SPGraphManager
+class SPEdgePredicate
 {
 public:
-	SPGraph spGraph;
-	std::map<SuperPixelID, SPGraph::vertex_descriptor> idLookup;
+	SPEdgePredicate() : mGraph(0) {}
+	SPEdgePredicate(SPGraph& graph) : mGraph(&graph) {}
 
+	bool operator() (const SPGraph::edge_descriptor edgeID) const
+	{
+		return (*mGraph)[edgeID].partitionOn;
+	}
+private:
+	SPGraph* mGraph;
 };
 
 

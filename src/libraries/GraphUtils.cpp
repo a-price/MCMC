@@ -13,6 +13,11 @@ double randbetween(double min, double max)
 	return (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
 }
 
+bool edgeOn(SPEdge edge)
+{
+	return edge.partitionOn;
+}
+
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights, double temperature)
 {
@@ -187,44 +192,38 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 	}
 }
 
-void getNewConnectedSets(SPGraph& graph)
+boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& graph)
 {
+	// Loop through all edges and probabilistically turn them on
 	int count = 0;
 	SPGraph::edge_iterator edgeIt, edgeEnd;
 	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
 	for (; edgeIt != edgeEnd; ++edgeIt)
 	{
 		SPEdge & edge = graph[*edgeIt];
-
 		//std::cout << boost::source(*edgeIt, graph) << "->" << boost::target(*edgeIt, graph) << " ";
-
-		edge.partitionOn = (randbetween(0,1) <= edge.BernoulliProbability);
+		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability*edge.BernoulliProbability*edge.BernoulliProbability));
 		//std::cout << "set edge: " << edge.partitionOn << "\t";
 		if (edge.partitionOn) {count ++;}
 	}
 	std::cout << "set " << count << " edges of " << graph.m_edges.size() << " to true.\n";
-}
 
-void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency)
-{
-	// TODO: incorporate xyz distance
-	// TODO: incorporate nearest neighbor lookup
-	int sa = a.cols();
-	int sb = b.cols();
-	int fullSize = sa + sb;
-	Eigen::VectorXf weights = Eigen::VectorXf::Ones(a.rows());
-	adjacency = Eigen::MatrixXf::Zero(fullSize, fullSize);
+	// Get a filtered graph to do connected components on
+	boost::filtered_graph<SPGraph, SPEdgePredicate> fGraph(graph, SPEdgePredicate(graph));
 
-	for (int i = 0; i < sa; i++)
-		for (int j = 0; j < sb; j++)
-		{
-			double p = pMerge(a.col(i), b.col(j), weights);
-			if (p > 0.01)
-			{
-				adjacency(i,sa+j) = p;
-				adjacency(sa+j,i) = p;
-			}
-		}
+	// Get the connected sets and return them
+	std::vector<int> component(num_vertices(graph));
+	int num = connected_components(fGraph, &component[0]);
+
+	//std::vector<std::vector<SPGraph::vertex_descriptor> >
+
+	std::vector<int>::size_type i;
+	std::cout << "Total number of components: " << num << " vector elements: " << component.size() << std::endl;
+	for (i = 0; i <= component.size(); i+=50)
+		std::cout << "Vertex " << i <<" is in component " << component[i] << std::endl;
+	std::cout << std::endl;
+
+	return fGraph;
 }
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix)

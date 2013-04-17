@@ -32,9 +32,7 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 
 void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold=0.1);
 
-void getNewConnectedSets(SPGraph& graph);
-
-void getPairwiseAdjacencyGraph(const Eigen::MatrixXf& a, const Eigen::MatrixXf& b, Eigen::MatrixXf& adjacency);
+boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& graph);
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix = "a");
 
