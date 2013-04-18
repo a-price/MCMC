@@ -3,7 +3,7 @@
  * \brief 
  *
  *  \date Apr 3, 2013
- *  \author arprice
+ *  \author Andrew Price
  */
 
 //#ifndef TESTGRAPHUTILS_H_

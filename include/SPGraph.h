@@ -58,8 +58,8 @@ public:
 	Eigen::VectorXf getDefaultWeights()
 	{
 		Eigen::VectorXf retVal(modelParams.rows()+position.rows());
-		retVal << 1.0,1.0,1.0,10.0,
-				0.5,0.5,0.5;
+		retVal << 5.0, 5.0 ,5.0, 10.0,
+				0.5, 0.5, 0.5;
 		return retVal;
 	}
 

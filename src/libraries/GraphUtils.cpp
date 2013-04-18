@@ -202,7 +202,7 @@ boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& gra
 	{
 		SPEdge & edge = graph[*edgeIt];
 		//std::cout << boost::source(*edgeIt, graph) << "->" << boost::target(*edgeIt, graph) << " ";
-		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability*edge.BernoulliProbability*edge.BernoulliProbability));
+		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
 		//std::cout << "set edge: " << edge.partitionOn << "\t";
 		if (edge.partitionOn) {count ++;}
 	}
@@ -212,16 +212,25 @@ boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& gra
 	boost::filtered_graph<SPGraph, SPEdgePredicate> fGraph(graph, SPEdgePredicate(graph));
 
 	// Get the connected sets and return them
-	std::vector<int> component(num_vertices(graph));
+	std::vector<SPGraph::vertex_descriptor> component(num_vertices(graph));
 	int num = connected_components(fGraph, &component[0]);
 
-	//std::vector<std::vector<SPGraph::vertex_descriptor> >
-
-	std::vector<int>::size_type i;
+	std::vector<SPGraph::vertex_descriptor>::size_type i;
 	std::cout << "Total number of components: " << num << " vector elements: " << component.size() << std::endl;
 	for (i = 0; i <= component.size(); i+=50)
 		std::cout << "Vertex " << i <<" is in component " << component[i] << std::endl;
 	std::cout << std::endl;
+
+	std::vector<std::vector<SPGraph::vertex_descriptor> > componentsToIndices(num);
+	for (i = 0; i < component.size(); i++)
+	{
+		componentsToIndices[component[i]].push_back(i);
+	}
+
+	for (i = 0; i < componentsToIndices.size(); i++)
+	{
+		std::cout << componentsToIndices[i].size() << "\t";
+	}
 
 	return fGraph;
 }
