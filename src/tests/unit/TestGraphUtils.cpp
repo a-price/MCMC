@@ -28,6 +28,7 @@ class TestGraphUtils : public CppUnit::TestFixture
 	CPPUNIT_TEST(testPMatch);
 	CPPUNIT_TEST(testCrossMatch);
 	CPPUNIT_TEST(testSerialize);
+	CPPUNIT_TEST(testRegionGrowing);
 	CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -35,7 +36,7 @@ public:
 	 * \fn setUp
 	 * \brief Initializes test context for following unit tests for TestGraphUtils methods.
 	 */
-	void setUp(){}
+	void setUp(){srand(time(NULL));}
 
 	/**
 	 * \fn tearDown
@@ -120,7 +121,36 @@ public:
 
 	    CPPUNIT_ASSERT(graphA.m_edges.size() == graphB.m_edges.size());
 	    CPPUNIT_ASSERT(graphA.m_vertices.size() == graphB.m_vertices.size());
-	    std::cerr << graphB.m_vertices.size();
+	    std::cerr << "Recorded graph size: " << graphB.m_vertices.size() << std::endl;
+	}
+
+	/**
+	 * \fn testRegionGrowing
+	 * \brief Verifies region growing for various graphs
+	 */
+	void testRegionGrowing()
+	{
+		SPGraph spGraph = generateSampleGraph();
+
+		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+		std::set<SPGraph::vertex_descriptor> elements;
+
+		getNewConnectedSet(spGraph, 0, elements);
+		std::cout << "Elements in set: " << elements.size() << std::endl;
+
+		spGraph = generateDisconnectedGraph();
+
+		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+		elements.clear();
+
+		getNewConnectedSet(spGraph, 0, elements);
+		std::cout << "Elements in set: " << elements.size() << std::endl;
+
+		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+		elements.clear();
+
+		getNewConnectedSet(spGraph, 6, elements);
+		std::cout << "Elements in set: " << elements.size() << std::endl;
 	}
 
 

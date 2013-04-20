@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 	std::ifstream ifs("test.big");
 	{
 		boost::archive::text_iarchive ia(ifs);
-		// write class instance to archive
+		// read class instance from archive
 		ia >> spGraph;
 		// archive and stream closed when destructors are called
 	}

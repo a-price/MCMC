@@ -192,7 +192,25 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 	}
 }
 
-boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& graph)
+SPFilteredGraph getNewPartition(SPGraph& graph)
+{
+	// Loop through all edges and probabilistically turn them on
+	int count = 0;
+	SPGraph::edge_iterator edgeIt, edgeEnd;
+	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
+	for (; edgeIt != edgeEnd; ++edgeIt)
+	{
+		SPEdge & edge = graph[*edgeIt];
+		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
+		if (edge.partitionOn) {count ++;}
+	}
+	// Get a filtered graph to do connected components on
+	SPFilteredGraph fGraph(graph, SPEdgePredicate(graph));
+
+	return fGraph;
+}
+
+SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 {
 	// Loop through all edges and probabilistically turn them on
 	int count = 0;
@@ -209,7 +227,7 @@ boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& gra
 	std::cout << "set " << count << " edges of " << graph.m_edges.size() << " to true.\n";
 
 	// Get a filtered graph to do connected components on
-	boost::filtered_graph<SPGraph, SPEdgePredicate> fGraph(graph, SPEdgePredicate(graph));
+	SPFilteredGraph fGraph(graph, SPEdgePredicate(graph));
 
 	// Get the connected sets and return them
 	std::vector<SPGraph::vertex_descriptor> component(num_vertices(graph));
@@ -233,6 +251,52 @@ boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& gra
 	}
 
 	return fGraph;
+}
+
+void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth)
+{
+	// Make sure we add descriptor to set of nodes
+	elements.insert(superpixel);
+	++depth;
+
+	// Loop through all neighbor vertices
+	SPGraph::out_edge_iterator outEdgeIt, outEdgeEnd;
+	boost::tie(outEdgeIt, outEdgeEnd) = boost::out_edges(superpixel, graph);
+	for (; outEdgeIt != outEdgeEnd; ++outEdgeIt)
+	{
+		// Get a neighbor superpixel
+		SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, graph);
+		//for (int i = 0; i < depth; i++) {std::cout << "\t";}
+		//std::cout << superpixel;
+
+		// See if it's already in our set
+		if (elements.find(neighborID) != elements.end())
+		{
+			// The vertex is already one of our connected components, so keep iterating
+			//std::cout << " --O " << neighborID << std::endl;
+			continue;
+		}
+
+		// Compute a random variable for the jump
+		SPEdge & edge = graph[*outEdgeIt];
+		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
+
+		// If connected, recurse into the new node and keep growing
+		if (edge.partitionOn)
+		{
+			//std::cout << " --> " << neighborID << std::endl;
+
+			// Continue depth-first search at new node
+			getNewConnectedSet(graph, neighborID, elements, depth);
+		}
+		else
+		{
+			//std::cout << " --X " << neighborID << std::endl;
+		}
+
+	}
+
+	--depth;
 }
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix)
@@ -362,6 +426,32 @@ SPGraph generateSampleGraph()
 	for (int i = 0; i < 4; i++)
 	{
 		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i+4, ((i+1)%4)+4, graph);
+		SPGraph::edge_descriptor eID = e.first;
+		graph[eID].BernoulliProbability = 0.2;
+	}
+
+	return graph;
+}
+
+SPGraph generateDisconnectedGraph()
+{
+	SPGraph graph;
+
+	for(int i = 0; i < 8; i++)
+	{
+		SPGraph::vertex_descriptor v = boost::add_vertex(graph);
+	}
+
+	for(int i = 1; i < 4; i++)
+	{
+		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i, 0, graph);
+		SPGraph::edge_descriptor eID = e.first;
+		graph[eID].BernoulliProbability = 0.8;
+	}
+
+	for(int i = 5; i < 8; i++)
+	{
+		std::pair<SPGraph::edge_descriptor, bool> e = boost::add_edge(i, 4, graph);
 		SPGraph::edge_descriptor eID = e.first;
 		graph[eID].BernoulliProbability = 0.2;
 	}

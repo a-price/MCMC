@@ -10,9 +10,11 @@
 #define MULTIVIEWSEGMENT_H_
 
 #include "SPGraph.h"
+#include "GraphUtils.h"
 
 class MultiviewSegment
 {
+public:
 	std::set<SPGraph::vertex_descriptor> vertices;	///< The set of super pixels with the same label.
 	Eigen::Vector4f plane;							///< The information of the previous best plane.
 	long hash;										///< Represents the set of superpixels and the type

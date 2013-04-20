@@ -105,5 +105,6 @@ private:
 	SPGraph* mGraph;
 };
 
+typedef boost::filtered_graph<SPGraph, SPEdgePredicate> SPFilteredGraph;
 
 #endif /* SPGRAPH_H_ */

@@ -32,12 +32,18 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 
 void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold=0.1);
 
-boost::filtered_graph<SPGraph, SPEdgePredicate> getNewConnectedSets(SPGraph& graph);
+SPFilteredGraph getNewPartition(SPGraph& graph);
+
+SPFilteredGraph getNewConnectedSets(SPGraph& graph);
+
+void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth = 0);
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix = "a");
 
 void writeOrderedGraph(Eigen::MatrixXf& adjacency, std::string filename, std::vector<Eigen::Vector2i> spCenters, std::string prefix = "a");
 
 SPGraph generateSampleGraph();
+
+SPGraph generateDisconnectedGraph();
 
 #endif /* GRAPHUTILS_H_ */
