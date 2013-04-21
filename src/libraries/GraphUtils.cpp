@@ -192,7 +192,7 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 	}
 }
 
-SPFilteredGraph getNewPartition(SPGraph& graph)
+/*SPFilteredGraph getNewPartition(SPGraph& graph)
 {
 	// Loop through all edges and probabilistically turn them on
 	int count = 0;
@@ -207,8 +207,38 @@ SPFilteredGraph getNewPartition(SPGraph& graph)
 	// Get a filtered graph to do connected components on
 	SPFilteredGraph fGraph(graph, SPEdgePredicate(graph));
 
+	// Get the connected sets and return them
+	std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type> components;
+	boost::associative_property_map<std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>> componentsMap(components);
+	int num = connected_components(fGraph, componentsMap);
+
+	std::cout << "map elements: " << components.size() << std::endl;
+
+	std::vector<SPGraph::vertex_descriptor>::size_type i;
+
+	std::vector<std::vector<SPGraph::vertex_descriptor> > componentsToIndices(num);
+	for (i = 0; i < components.size(); i++)
+	{
+		std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>::iterator component = components.find(i);
+		if (component == components.end())
+		{
+			// Problem, this should not happen
+			std::cerr << "Missing vertex.\n";
+			continue;
+		}
+		componentsToIndices[component->second].push_back(component->first);
+
+		// Set the segment ID for each superpixel
+		graph[component->first].currentSegmentID = component->second;
+	}
+
+	for (i = 0; i < componentsToIndices.size(); i++)
+	{
+		std::cout << componentsToIndices[i].size() << "\t";
+	}
+
 	return fGraph;
-}
+}*/
 
 SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 {
@@ -230,19 +260,27 @@ SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 	SPFilteredGraph fGraph(graph, SPEdgePredicate(graph));
 
 	// Get the connected sets and return them
-	std::vector<SPGraph::vertex_descriptor> component(num_vertices(graph));
-	int num = connected_components(fGraph, &component[0]);
+	//std::vector<SPGraph::vertex_descriptor> component(num_vertices(graph));
+	std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type> components;
+	boost::associative_property_map<std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>> componentsMap(components);
+	int num = connected_components(fGraph, componentsMap);
 
 	std::vector<SPGraph::vertex_descriptor>::size_type i;
-	std::cout << "Total number of components: " << num << " vector elements: " << component.size() << std::endl;
-	for (i = 0; i <= component.size(); i+=50)
-		std::cout << "Vertex " << i <<" is in component " << component[i] << std::endl;
-	std::cout << std::endl;
 
 	std::vector<std::vector<SPGraph::vertex_descriptor> > componentsToIndices(num);
-	for (i = 0; i < component.size(); i++)
+	for (i = 0; i < components.size(); i++)
 	{
-		componentsToIndices[component[i]].push_back(i);
+		std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>::iterator component = components.find(i);
+		if (component == components.end())
+		{
+			// Problem, this should not happen
+			std::cerr << "Missing vertex.\n";
+			continue;
+		}
+		componentsToIndices[component->second].push_back(component->first);
+
+		// Set the segment ID for each superpixel
+		graph[component->first].currentSegmentID = component->second;
 	}
 
 	for (i = 0; i < componentsToIndices.size(); i++)
@@ -268,6 +306,12 @@ void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, s
 		SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, graph);
 		//for (int i = 0; i < depth; i++) {std::cout << "\t";}
 		//std::cout << superpixel;
+
+		// See if it's in the same segment
+		if (graph[superpixel].currentSegmentID != graph[neighborID].currentSegmentID)
+		{
+			continue;
+		}
 
 		// See if it's already in our set
 		if (elements.find(neighborID) != elements.end())

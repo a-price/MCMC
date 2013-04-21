@@ -1,0 +1,143 @@
+/**
+ * \file MultiviewSegmentation.cpp
+ * \brief 
+ *
+ *  \date Apr 20, 2013
+ *  \author Andrew Price
+ */
+
+#include "MultiviewSegmentation.h"
+
+MultiviewSegmentation::MultiviewSegmentation(SPGraph& graph) :
+		mGraph(graph)
+{
+	// Loop through all edges and probabilistically turn them on
+	int count = 0;
+	SPGraph::edge_iterator edgeIt, edgeEnd;
+	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
+	for (; edgeIt != edgeEnd; ++edgeIt)
+	{
+		SPEdge & edge = graph[*edgeIt];
+		edge.partitionOn = (randbetween(0, 1) <= (edge.BernoulliProbability));
+		if (edge.partitionOn)
+		{
+			count++;
+		}
+	}
+	// Get a filtered graph to do connected components on
+	SPFilteredGraph fGraph(graph, SPEdgePredicate(graph));
+
+	// Get the connected sets and return them
+	std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type> components;
+	boost::associative_property_map<
+			std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>> componentsMap(components);
+	int numComponents = connected_components(fGraph, componentsMap);
+
+	// Create Segments based on connected components
+	for (int i = 0; i < numComponents; i++)
+	{
+		MultiviewSegment segment;
+		segment.segmentID = i;
+		segments.push_back(segment);
+	}
+
+	// Add superpixels to segments
+	for (int i = 0; i < components.size(); i++)
+	{
+		std::map<SPGraph::vertex_descriptor, SPGraph::vertices_size_type>::iterator component =	components.find(i);
+		if (component == components.end())
+		{
+			// Problem, this should not happen
+			std::cerr << "Missing vertex.\n";
+			continue;
+		}
+		segments[component->second].vertices.insert(component->first);
+
+		// Set the segment ID for each superpixel
+		graph[component->first].currentSegmentID = component->second;
+	}
+
+	for (int i = 0; i < segments.size(); i++)
+	{
+		std::cout << segments[i].vertices.size() << "\t";
+	}
+}
+
+MultiviewSegment* MultiviewSegmentation::getParentSegment(
+		SPGraph::vertex_descriptor target)
+{
+	for (int i = 0; i < segments.size(); i++)
+	{
+		if (segments[i].vertices.find(target) != segments[i].vertices.end())
+		{
+			return &(segments[i]);
+		}
+	}
+	// TODO: Throw Error, since pixel not found...
+	return NULL;
+}
+
+MultiviewSegment* MultiviewSegmentation::addNewSegment(std::set<SPGraph::vertex_descriptor> elements)
+{
+	// Create the new segment
+	MultiviewSegment newSegment = *(new MultiviewSegment);
+	newSegment.segmentID = segments.size();
+
+	for (std::set<SPGraph::vertex_descriptor>::iterator i = elements.begin(); i != elements.end(); i++)
+	{
+		// Remove superpixels from other segments
+		MultiviewSegment* oldSegment = getParentSegment(*i);
+		oldSegment->vertices.erase(*i);
+
+		// Add superpixel to new component
+		newSegment.vertices.insert(*i);
+
+		// Change parent segment in vertices
+		mGraph[*i].currentSegmentID = newSegment.segmentID;
+	}
+
+	segments.push_back(newSegment);
+
+	return &segments[segments.size()-1];
+}
+
+std::set<MultiviewSegment*> MultiviewSegmentation::getNeighborSegments(std::set<SPGraph::vertex_descriptor> elements)
+{
+	std::set<MultiviewSegment*> neighbors;
+
+	for (std::set<SPGraph::vertex_descriptor>::iterator i = elements.begin(); i != elements.end(); i++)
+	{
+		// Loop through all neighbor vertices
+		SPGraph::out_edge_iterator outEdgeIt, outEdgeEnd;
+		boost::tie(outEdgeIt, outEdgeEnd) = boost::out_edges(*i, mGraph);
+		for (; outEdgeIt != outEdgeEnd; ++outEdgeIt)
+		{
+			// Get a neighbor superpixel
+			SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, mGraph);
+
+			// If it's in a different segment, add that segment to the neighbor set
+			if (mGraph[neighborID].currentSegmentID != mGraph[*i].currentSegmentID)
+			{
+				//neighbors.insert(segments.)
+			}
+		}
+	}
+
+	return neighbors;
+}
+
+void MultiviewSegmentation::moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment* targetSegment)
+{
+	for (std::set<SPGraph::vertex_descriptor>::iterator i = elements.begin(); i != elements.end(); i++)
+	{
+		// Remove superpixels from other segments
+		MultiviewSegment* oldSegment = getParentSegment(*i);
+		oldSegment->vertices.erase(*i);
+
+		// Add superpixel to new component
+		targetSegment->vertices.insert(*i);
+
+		// Change parent segment in vertices
+		mGraph[*i].currentSegmentID = targetSegment->segmentID;
+	}
+}

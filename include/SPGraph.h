@@ -42,6 +42,7 @@ class SPNode
 {
 public:
 	size_t spid;
+	size_t currentSegmentID;
 	int numPixels;
 	std::string parentFrame;
 	Eigen::Vector4f modelParams;
