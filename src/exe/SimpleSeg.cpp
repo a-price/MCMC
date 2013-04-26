@@ -36,26 +36,16 @@
 // Segmentation includes...
 //#include "InteractiveSegmenter.h"
 #include "SegmentationContext.h"
-/*
-#include "Common.h"
-#include "Graph.h"
-#include "IO.h"
-#include "OverSegmentation.h"
 
-#include <gtsam/base/Matrix.h>
-#include <gtsam/geometry/Point2.h>
-
-#include <map>
-*/
 #include <math.h>
 #include <exception>
 #include "tf_eigen.h"
 #include "GraphUtils.h"
 #include "MatUtils.h"
 #include "GraphVisualization.h"
-
+#include "Serialization.h"
 #include <boost/archive/text_oarchive.hpp>
-//#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
 // Visualization stuff
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,sensor_msgs::Image, sensor_msgs::PointCloud2> KinectSyncPolicy;
@@ -65,6 +55,7 @@ const std::string paramFilename = "/home/arprice/fuerte_workspace/sandbox/MCMC/b
 const std::string colorTopic = "/camera/rgb/image_color";
 const std::string depthTopic = "/camera/depth/image";
 const std::string pointTopic = "/camera/rgb/points";
+const int MIN_SEGMENT_SIZE = 50;
 
 ros::Publisher superPixelPub;
 ros::Publisher hyperPixelPub;
@@ -74,7 +65,7 @@ ros::Publisher edgePub;
 tf::TransformListener* listener;
 tf::TransformBroadcaster* broadcaster;
 std::vector<SegmentationContext> contexts;
-volatile int contextNum = -1;
+//volatile int contextNum = -1;
 volatile bool graphWritten = false;
 
 SPGraph spGraph;
@@ -84,30 +75,13 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 void segment(cv::Mat disparities, cv::Mat colors, pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, Eigen::Isometry3d cameraPose);
 void createLookup(const Graph& graph, Eigen::MatrixXf& lookup);
 
-Eigen::Quaterniond getRotation(Eigen::Vector3d axis, Eigen::Vector3d initial)
-{
-	// Assume @ (1,0,0) originally
-	if (axis.norm() - 1.0 > 0.001) {axis.normalize();}
-	Eigen::Vector3d q = initial.cross(axis);
-	double angle = acos(q.dot(axis));
-	double sinAngle = sin(angle/2.0);
-	double cosAngle = cos(angle/2.0);
-
-	Eigen::Quaterniond ret;
-	ret.x() = q.x() * sinAngle;
-	ret.y() = q.y() * sinAngle;
-	ret.z() = q.z() * sinAngle;
-	ret.w() = cosAngle;
-
-	return ret;
-}
-
 int main(int argc, char** argv)
 {
 	ros::Time::init();
 
 	IO::readSegmentationParams(paramFilename, params);
 	params.print();
+
 
 #ifndef USE_BAGFILE
 	cv::Mat disparities, colors, depth3;
@@ -153,7 +127,7 @@ int main(int argc, char** argv)
 
 
 const int callbackInterval = 4;
-const int maxCallbacks = 6;
+const int maxCallbacks = 2;
 int numCallbacks = 0;
 int numTotalCallbacks = 0;
 void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::ImageConstPtr depth, const sensor_msgs::PointCloud2ConstPtr points)
@@ -168,12 +142,12 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	else if (numCallbacks == maxCallbacks && !graphWritten && ros::ok())
 	{
 	    // create and open a character archive for output
-	    std::ofstream ofs("test.big");
+	    std::ofstream ofs("test.big", std::fstream::out | std::fstream::binary);
 	    std::cout << "Writing graph to file...\n";
 
 	    // save data to archive
 	    {
-	        boost::archive::text_oarchive oa(ofs);
+	        boost::archive::binary_oarchive oa(ofs);
 	        // write class instance to archive
 	        oa << spGraph;
 	        // archive and stream closed when destructors are called
@@ -210,15 +184,6 @@ void kinectCallback(const sensor_msgs::ImageConstPtr color, const sensor_msgs::I
 	}
 
 	ROS_INFO("Got Cloud.");
-
-	// Remove outlier points as noise
-//	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
-//	sor.setInputCloud (pCloud);
-//	sor.setMeanK (20);
-//	ROS_INFO("Called a.");
-//	sor.setStddevMulThresh (2.0);
-//	sor.filter (*pCloudF);
-//	ROS_INFO("Called b.");
 
 	// TODO:convert to disparity?
 	dPtr->image.copyTo(disparities);
@@ -261,7 +226,6 @@ void segment(cv::Mat d, cv::Mat c,
 	cv::imwrite("./temp/superPixels/colorf.png", colors);
 
 	// Segmentation setup
-	//SegmentationContext sc;
 	Graph graph;
 	cv::Mat overSegmented;
 	Eigen::MatrixXf spLookup;
@@ -269,7 +233,6 @@ void segment(cv::Mat d, cv::Mat c,
 	std::vector<SuperPixelID> StoSP[4];
 
 	// Segmentation call
-
 	gttic_(OverSegmentation);
 	ROS_INFO("Segmenting.");
 	OverSegmentation::overSegment(disparities, colors, params, graph);
@@ -283,7 +246,9 @@ void segment(cv::Mat d, cv::Mat c,
 	cv::imwrite("./temp/superPixels/overSegmented.png", overSegmented);
 	ROS_INFO("Generated Lookup.");
 
+	// Declare some variables
 	pcl::PointCloud<pcl::PointXYZRGB> outCloud;
+	std::map<SuperPixelID, pcl::PointCloud<pcl::PointXYZRGB>::Ptr> superpixelClouds;
 	std::map<SuperPixelID, SuperPixel*>::iterator iter;
 	std::string idName;
 	int count = 0, validCount = 0;
@@ -308,8 +273,9 @@ void segment(cv::Mat d, cv::Mat c,
 		// Get central pixel (middle?)
 		int len = iter->second->A_->rows();
 //		ROS_INFO("A");
-		if (len < 25) {continue;}
+		if (len < MIN_SEGMENT_SIZE) {continue;}
 		pcl::PointIndices::Ptr inliers(new pcl::PointIndices ());
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr subCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 		for (int i = 0; i < len; i++)
 		{
 			int u = (int)(*(iter->second->A_))(i,0);
@@ -321,19 +287,21 @@ void segment(cv::Mat d, cv::Mat c,
 
 			//cv::Vec3f pixel = colors.at<cv::Vec3f>(v,u);
 			cv::Vec3b pixel = overSegmented.at<cv::Vec3b>(v,u);
-//			ROS_INFO("a");
-//			std::cerr << "point info: " << u << "," << v << ">" << idx << "," << pCloud->points.size() << std::endl;
 			pcl::PointXYZ point = pCloud->points[idx];
-//			ROS_INFO("b");
 			pcl::PointXYZRGB sPoint;
 			sPoint.x = point.x; sPoint.y = point.y; sPoint.z = point.z;
-//			ROS_INFO("c");
 			sPoint.b = pixel[0]; sPoint.g = pixel[1]; sPoint.r = pixel[2];
-//			ROS_INFO("d");
 			outCloud.points.push_back(sPoint);
+			if (!isnan(point.x))
+				{subCloud->points.push_back(sPoint);}
 		}
+		// Add subcloud to map
+		superpixelClouds.insert(
+				std::pair<SuperPixelID, pcl::PointCloud<pcl::PointXYZRGB>::Ptr>(
+				iter->first, subCloud));
 		//ROS_INFO("Got Indices.");
 
+		// TODO: This is now duplicated by subCloud
 		/********** Get Subset **********/
 		pcl::ExtractIndices<pcl::PointXYZ> extract;
 		pcl::PointCloud<pcl::PointXYZ>::Ptr spCloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -387,15 +355,6 @@ void segment(cv::Mat d, cv::Mat c,
 		gCentroid = cameraFrameTF * centroid;
 		gCentroids.push_back(gCentroid);
 
-		//ROS_INFO_STREAM("centroid:\n" << centroid.matrix().transpose()
-		//		<< "gCentroid:\n" << gCentroid.matrix().transpose());
-
-		// Write id @ pixel location
-		//cv::putText(overSegmented, idName, cv::Point(u,v),
-		//		cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(255,255,255), 1, CV_AA);
-		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d::UnitZ());
-		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d(fitPlane[0],fitPlane[1],fitPlane[2]), Eigen::Vector3d::UnitX());
-		//Eigen::Quaterniond q = getRotation(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
 		Eigen::Quaterniond q;
 		q.setFromTwoVectors(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
 
@@ -431,8 +390,10 @@ void segment(cv::Mat d, cv::Mat c,
 
 	Eigen::VectorXf weights(4);
 	weights << 1,1,1,4;
-	SPGraph g = getPlanarAdjacencyGraph(graph, Theta, weights,
-			spCenters, gCentroids, spModelLookup, 0.4);//getSelfAdjacencyGraph(Theta, 0.5);
+	SPGraph g = getPlanarAdjacencyGraph(graph,
+			Theta, weights,
+			spCenters, gCentroids,
+			superpixelClouds, spModelLookup, 0.05);//getSelfAdjacencyGraph(Theta, 0.5);
 	//writeOrderedGraph(g, "graph.dot", spCenters);
 
 	mergeNewScanGraph(spGraph, g, 0.4);

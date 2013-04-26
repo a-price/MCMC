@@ -18,7 +18,7 @@
 #include "GraphUtils.h"
 #include "MatUtils.h"
 #include "GraphVisualization.h"
-
+#include "Serialization.h"
 
 int main(int argc, char** argv)
 {

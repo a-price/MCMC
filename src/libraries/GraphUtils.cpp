@@ -8,16 +8,6 @@
 
 #include "GraphUtils.h"
 
-double randbetween(double min, double max)
-{
-	return (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
-}
-
-bool edgeOn(SPEdge edge)
-{
-	return edge.partitionOn;
-}
-
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights, double temperature)
 {
@@ -62,6 +52,7 @@ Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf we
 SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
 		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
+		std::map<SuperPixelID, pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& superpixelClouds,
 		std::map<SuperPixelID, int>& spModelLookup, double mergeThreshold)
 {
 	// TODO: This really should look up the model from the graph itself
@@ -70,6 +61,7 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 
 	std::map<SuperPixelID, SuperPixel*>::iterator sp;
 	std::map<SuperPixelID, int>::iterator ranPlaneModelIdx;
+	std::map<SuperPixelID, pcl::PointCloud<pcl::PointXYZRGB>::Ptr>::iterator cloudIdx;
 	std::map<SuperPixelID, SPGraph::vertex_descriptor> graphLookup;
 
 	for (sp = graph.superPixels_.begin(); sp != graph.superPixels_.end(); ++sp)
@@ -79,10 +71,23 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		{
 			SPGraph::vertex_descriptor v = boost::add_vertex(spGraph);
 			graphLookup.insert(std::pair<SuperPixelID, SPGraph::vertex_descriptor>(sp->first, v));
-			spGraph[v].spid = sp->first;
-			spGraph[v].modelParams = theta.col(ranPlaneModelIdx->second);
-			spGraph[v].position = centroids3[ranPlaneModelIdx->second].topRows(3);
-			spGraph[v].imagePosition = centroids2[ranPlaneModelIdx->second];
+
+			SPNode& vertex = spGraph[v];
+			vertex.spid = sp->first;
+			vertex.modelParams = theta.col(ranPlaneModelIdx->second);
+			vertex.position = centroids3[ranPlaneModelIdx->second].topRows(3);
+			vertex.imagePosition = centroids2[ranPlaneModelIdx->second];
+
+			cloudIdx = superpixelClouds.find(sp->first);
+			if (cloudIdx != superpixelClouds.end())
+			{
+				vertex.subCloud = cloudIdx->second;
+				std::cerr << "Added " << vertex.subCloud->points.size() << " points.\n";
+			}
+			else
+			{
+				std::cerr << "No points for superpixel!\n";
+			}
 
 			// TODO: Add other parameters
 		}
@@ -117,7 +122,11 @@ SPGraph getPlanarAdjacencyGraph(Graph& graph,
 					if (p > mergeThreshold)
 					{
 						spGraph[e].BernoulliProbability = p;
-						spGraph[e].partitionOn = true;
+						spGraph[e].currentState->partitionOn = true;
+					}
+					else
+					{
+						boost::remove_edge(e, spGraph);
 					}
 				}
 			}
@@ -165,7 +174,7 @@ void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThresho
 			{
 				SPGraph::edge_descriptor e = boost::add_edge(vertexIDA, vertexIDB, original).first; // get a new edge
 				original[e].BernoulliProbability = p;
-				original[e].partitionOn = true;
+				original[e].currentState->partitionOn = true;
 			}
 		}
 	}
@@ -250,9 +259,9 @@ SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 	{
 		SPEdge & edge = graph[*edgeIt];
 		//std::cout << boost::source(*edgeIt, graph) << "->" << boost::target(*edgeIt, graph) << " ";
-		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
+		edge.proposedState->partitionOn = (MathUtils::randbetween(0,1) <= (edge.BernoulliProbability));
 		//std::cout << "set edge: " << edge.partitionOn << "\t";
-		if (edge.partitionOn) {count ++;}
+		if (edge.proposedState->partitionOn) {count ++;}
 	}
 	std::cout << "set " << count << " edges of " << graph.m_edges.size() << " to true.\n";
 
@@ -280,7 +289,7 @@ SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 		componentsToIndices[component->second].push_back(component->first);
 
 		// Set the segment ID for each superpixel
-		graph[component->first].currentSegmentID = component->second;
+		graph[component->first].proposedState->currentSegmentID = component->second;
 	}
 
 	for (i = 0; i < componentsToIndices.size(); i++)
@@ -291,57 +300,57 @@ SPFilteredGraph getNewConnectedSets(SPGraph& graph)
 	return fGraph;
 }
 
-void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth)
-{
-	// Make sure we add descriptor to set of nodes
-	elements.insert(superpixel);
-	++depth;
-
-	// Loop through all neighbor vertices
-	SPGraph::out_edge_iterator outEdgeIt, outEdgeEnd;
-	boost::tie(outEdgeIt, outEdgeEnd) = boost::out_edges(superpixel, graph);
-	for (; outEdgeIt != outEdgeEnd; ++outEdgeIt)
-	{
-		// Get a neighbor superpixel
-		SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, graph);
-		//for (int i = 0; i < depth; i++) {std::cout << "\t";}
-		//std::cout << superpixel;
-
-		// See if it's in the same segment
-		if (graph[superpixel].currentSegmentID != graph[neighborID].currentSegmentID)
-		{
-			continue;
-		}
-
-		// See if it's already in our set
-		if (elements.find(neighborID) != elements.end())
-		{
-			// The vertex is already one of our connected components, so keep iterating
-			//std::cout << " --O " << neighborID << std::endl;
-			continue;
-		}
-
-		// Compute a random variable for the jump
-		SPEdge & edge = graph[*outEdgeIt];
-		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
-
-		// If connected, recurse into the new node and keep growing
-		if (edge.partitionOn)
-		{
-			//std::cout << " --> " << neighborID << std::endl;
-
-			// Continue depth-first search at new node
-			getNewConnectedSet(graph, neighborID, elements, depth);
-		}
-		else
-		{
-			//std::cout << " --X " << neighborID << std::endl;
-		}
-
-	}
-
-	--depth;
-}
+//void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth)
+//{
+//	// Make sure we add descriptor to set of nodes
+//	elements.insert(superpixel);
+//	++depth;
+//
+//	// Loop through all neighbor vertices
+//	SPGraph::out_edge_iterator outEdgeIt, outEdgeEnd;
+//	boost::tie(outEdgeIt, outEdgeEnd) = boost::out_edges(superpixel, graph);
+//	for (; outEdgeIt != outEdgeEnd; ++outEdgeIt)
+//	{
+//		// Get a neighbor superpixel
+//		SPGraph::vertex_descriptor neighborID = boost::target(*outEdgeIt, graph);
+//		//for (int i = 0; i < depth; i++) {std::cout << "\t";}
+//		//std::cout << superpixel;
+//
+//		// See if it's in the same segment
+//		if (graph[superpixel].currentSegmentID != graph[neighborID].currentSegmentID)
+//		{
+//			continue;
+//		}
+//
+//		// See if it's already in our set
+//		if (elements.find(neighborID) != elements.end())
+//		{
+//			// The vertex is already one of our connected components, so keep iterating
+//			//std::cout << " --O " << neighborID << std::endl;
+//			continue;
+//		}
+//
+//		// Compute a random variable for the jump
+//		SPEdge & edge = graph[*outEdgeIt];
+//		edge.partitionOn = (randbetween(0,1) <= (edge.BernoulliProbability));
+//
+//		// If connected, recurse into the new node and keep growing
+//		if (edge.partitionOn)
+//		{
+//			//std::cout << " --> " << neighborID << std::endl;
+//
+//			// Continue depth-first search at new node
+//			getNewConnectedSet(graph, neighborID, elements, depth);
+//		}
+//		else
+//		{
+//			//std::cout << " --X " << neighborID << std::endl;
+//		}
+//
+//	}
+//
+//	--depth;
+//}
 
 void writeGraph(Eigen::MatrixXf& adjacency, std::string filename, std::string prefix)
 {
@@ -377,7 +386,7 @@ void convertAtoG(Eigen::MatrixXf& adjacency, SPGraph& graph)
 	{
 		SPNode node;
 		SPGraph::vertex_descriptor vID = boost::add_vertex(node, graph);
-		graph[vID].numPixels = vID;
+		graph[vID].spid = vID;
 	}
 
 	for (long i = 0; i < n; i++)
@@ -430,6 +439,7 @@ SPGraph generateSampleGraph()
 	for(int i = 0; i < 8; i++)
 	{
 		SPGraph::vertex_descriptor v = boost::add_vertex(graph);
+		SPNode& node = graph[v];
 
 		// Creates a cube of side length size
 		float size = 0.5;
@@ -442,9 +452,28 @@ SPGraph generateSampleGraph()
 		theta << pos[0],-pos[1],pos[2],1;
 
 		//std::cerr << pos.transpose() << std::endl;
-		graph[v].position = pos;
+		node.position = pos;
 		//std::cerr << graph[v].position.transpose() << std::endl;
-		graph[v].modelParams = theta;
+		node.modelParams = theta;
+
+		if (node.subCloud == NULL)
+		{
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr subCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+			node.subCloud = subCloud;
+		}
+		// add some points...
+		for (int j = 0; j < 10; j++)
+		{
+			pcl::PointXYZRGB pt;
+			pt.x = MathUtils::randbetween(-1,1);
+			pt.y = MathUtils::randbetween(-1,1);
+			pt.z = MathUtils::randbetween(-1,1);
+			pt.r = MathUtils::randbetween(0,255);
+			pt.g = MathUtils::randbetween(0,255);
+			pt.b = MathUtils::randbetween(0,255);
+
+			node.subCloud->points.push_back(pt);
+		}
 
 	}
 
@@ -484,6 +513,26 @@ SPGraph generateDisconnectedGraph()
 	for(int i = 0; i < 8; i++)
 	{
 		SPGraph::vertex_descriptor v = boost::add_vertex(graph);
+		SPNode& node = graph[v];
+
+		if (node.subCloud == NULL)
+		{
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr subCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+			node.subCloud = subCloud;
+		}
+		// add some points...
+		for (int j = 0; j < 10; j++)
+		{
+			pcl::PointXYZRGB pt;
+			pt.x = MathUtils::randbetween(-1,1);
+			pt.y = MathUtils::randbetween(-1,1);
+			pt.z = MathUtils::randbetween(-1,1);
+			pt.r = MathUtils::randbetween(0,255);
+			pt.g = MathUtils::randbetween(0,255);
+			pt.b = MathUtils::randbetween(0,255);
+
+			node.subCloud->points.push_back(pt);
+		}
 	}
 
 	for(int i = 1; i < 4; i++)
@@ -499,6 +548,13 @@ SPGraph generateDisconnectedGraph()
 		SPGraph::edge_descriptor eID = e.first;
 		graph[eID].BernoulliProbability = 0.2;
 	}
+
+	return graph;
+}
+
+SPGraph generateSampleSceneGraph()
+{
+	SPGraph graph;
 
 	return graph;
 }

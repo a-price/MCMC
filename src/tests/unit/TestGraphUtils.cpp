@@ -14,9 +14,13 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include "GraphUtils.h"
-
+#include "Serialization.h"
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+//#include <boost/archive/xml_iarchive.hpp>
+//#include <boost/archive/xml_oarchive.hpp>
 
 /**
  * \class TestGraphUtils
@@ -28,7 +32,7 @@ class TestGraphUtils : public CppUnit::TestFixture
 	CPPUNIT_TEST(testPMatch);
 	CPPUNIT_TEST(testCrossMatch);
 	CPPUNIT_TEST(testSerialize);
-	CPPUNIT_TEST(testRegionGrowing);
+//	CPPUNIT_TEST(testRegionGrowing);
 	CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -98,14 +102,16 @@ public:
 	void testSerialize()
 	{
 		SPGraph graphA, graphB;
-		graphA = generateSampleGraph();
+		//graphA = generateSampleGraph();
+		graphA = generateDisconnectedGraph();
 
 	    std::ofstream ofs("test.big");
 	    std::cout << "Writing graph to file...\n";
 
 	    // save data to archive
 	    {
-	        boost::archive::text_oarchive oa(ofs);
+	        boost::archive::binary_oarchive oa(ofs);
+	    	//boost::archive::xml_oarchive oa(ofs);
 	        // write class instance to archive
 	        oa << graphA;
 	        // archive and stream closed when destructors are called
@@ -113,7 +119,8 @@ public:
 
 	    std::ifstream ifs("test.big");
 	    {
-			boost::archive::text_iarchive ia(ifs);
+			boost::archive::binary_iarchive ia(ifs);
+	    	//boost::archive::xml_iarchive ia(ifs);
 			// write class instance to archive
 			ia >> graphB;
 			// archive and stream closed when destructors are called
@@ -121,6 +128,7 @@ public:
 
 	    CPPUNIT_ASSERT(graphA.m_edges.size() == graphB.m_edges.size());
 	    CPPUNIT_ASSERT(graphA.m_vertices.size() == graphB.m_vertices.size());
+	    CPPUNIT_ASSERT(graphA[0].subCloud->points[0].x == graphB[0].subCloud->points[0].x);
 	    std::cerr << "Recorded graph size: " << graphB.m_vertices.size() << std::endl;
 	}
 
@@ -128,30 +136,30 @@ public:
 	 * \fn testRegionGrowing
 	 * \brief Verifies region growing for various graphs
 	 */
-	void testRegionGrowing()
-	{
-		SPGraph spGraph = generateSampleGraph();
-
-		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
-		std::set<SPGraph::vertex_descriptor> elements;
-
-		getNewConnectedSet(spGraph, 0, elements);
-		std::cout << "Elements in set: " << elements.size() << std::endl;
-
-		spGraph = generateDisconnectedGraph();
-
-		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
-		elements.clear();
-
-		getNewConnectedSet(spGraph, 0, elements);
-		std::cout << "Elements in set: " << elements.size() << std::endl;
-
-		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
-		elements.clear();
-
-		getNewConnectedSet(spGraph, 6, elements);
-		std::cout << "Elements in set: " << elements.size() << std::endl;
-	}
+//	void testRegionGrowing()
+//	{
+//		SPGraph spGraph = generateSampleGraph();
+//
+//		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+//		std::set<SPGraph::vertex_descriptor> elements;
+//
+//		getNewConnectedSet(spGraph, 0, elements);
+//		std::cout << "Elements in set: " << elements.size() << std::endl;
+//
+//		spGraph = generateDisconnectedGraph();
+//
+//		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+//		elements.clear();
+//
+//		getNewConnectedSet(spGraph, 0, elements);
+//		std::cout << "Elements in set: " << elements.size() << std::endl;
+//
+//		std::cout << "Vertices: " << spGraph.m_vertices.size() << std::endl;
+//		elements.clear();
+//
+//		getNewConnectedSet(spGraph, 6, elements);
+//		std::cout << "Elements in set: " << elements.size() << std::endl;
+//	}
 
 
 private:

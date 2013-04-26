@@ -9,85 +9,78 @@
 #ifndef SPGRAPH_H_
 #define SPGRAPH_H_
 
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/common/io.h>
+#include <pcl/common/centroid.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+
+#include "Common.h"
 #include <string>
 #include <Eigen/Core>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/graph/adj_list_serialize.hpp>
 #include <boost/graph/filtered_graph.hpp>
-#include <boost/graph/connected_components.hpp>
 
-#include "Graph.h"
+#include "MathUtils.h"
 
-namespace boost
+class SPNodeState
 {
-template<class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
-inline void serialize(
-	Archive & ar,
-	Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & t,
-	const unsigned int file_version)
-{
-    size_t rows = t.rows(), cols = t.cols();
-    ar & rows;
-    ar & cols;
-    if( rows * cols != t.size() )
-    t.resize( rows, cols );
+public:
+	size_t currentSegmentID;
+	size_t currentModel;
+	Eigen::Vector4f currentModelParams;
+};
 
-    for(size_t i=0; i<t.size(); i++)
-    	ar & t.data()[i];
-}
-}
+class SPEdgeState
+{
+public:
+	bool partitionOn;
+};
 
 class SPNode
 {
 public:
 	size_t spid;
-	size_t currentSegmentID;
-	int numPixels;
 	std::string parentFrame;
 	Eigen::Vector4f modelParams;
 	Eigen::Vector3f position;
 	Eigen::Vector2i imagePosition;
 
-	Eigen::VectorXf getFullModel()
-	{
-		Eigen::VectorXf retVal(modelParams.rows()+position.rows());
-		retVal << modelParams, position;
-		return retVal;
-	}
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr subCloud;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr subCloudCartesian;
 
-	Eigen::VectorXf getDefaultWeights()
-	{
-		Eigen::VectorXf retVal(modelParams.rows()+position.rows());
-		retVal << 5.0, 5.0 ,5.0, 10.0,
-				0.5, 0.5, 0.5;
-		return retVal;
-	}
+	boost::shared_ptr<SPNodeState> currentState;
+	boost::shared_ptr<SPNodeState> proposedState;
 
-	template<class Archive>
-	void serialize(Archive &ar, const unsigned int version)
-	{
-		ar & spid;
-		ar & numPixels;
-		ar & parentFrame;
-		boost::serialize(ar, modelParams, version);
-		boost::serialize(ar, position, version);
-		boost::serialize(ar, imagePosition, version);
-	}
+	SPNode();
+
+	void acceptProposedState();
+
+	void setSubCloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr inCloud);
+
+	void computeFullModel();
+	Eigen::VectorXf getFullModel();
+	Eigen::VectorXf getDefaultWeights();
+
+	double getErrorForProposedModel();
+	double getErrorForPlaneModel(Eigen::Vector4f& planeCoefficients);
 };
 
 class SPEdge
 {
 public:
 	double BernoulliProbability;
-	bool partitionOn;
 
-	template<class Archive>
-	void serialize(Archive &ar, const unsigned int version)
-	{
-		ar & BernoulliProbability;
-		ar & partitionOn;
-	}
+	boost::shared_ptr<SPEdgeState> currentState;
+	boost::shared_ptr<SPEdgeState> proposedState;
+
+	SPEdge();
+//	~SPEdge();
+
+	void acceptProposedState();
 };
 
 typedef boost::adjacency_list<boost::setS, boost::vecS, boost::undirectedS, SPNode, SPEdge> SPGraph;
@@ -98,10 +91,8 @@ public:
 	SPEdgePredicate() : mGraph(0) {}
 	SPEdgePredicate(SPGraph& graph) : mGraph(&graph) {}
 
-	bool operator() (const SPGraph::edge_descriptor edgeID) const
-	{
-		return (*mGraph)[edgeID].partitionOn;
-	}
+	bool operator() (const SPGraph::edge_descriptor edgeID) const;
+
 private:
 	SPGraph* mGraph;
 };

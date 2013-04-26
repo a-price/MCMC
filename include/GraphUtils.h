@@ -8,13 +8,11 @@
 #ifndef GRAPHUTILS_H_
 #define GRAPHUTILS_H_
 
-//#include <ros/ros.h>
-
+#include "SPGraph.h"
 #include "Graph.h"
 #include <map>
-#include "SPGraph.h"
 
-double randbetween(double min, double max);
+#include <boost/graph/connected_components.hpp>
 
 double pMerge(Eigen::VectorXf theta1, Eigen::VectorXf theta2,
 		Eigen::VectorXf weights = Eigen::Vector4f::Ones(), double temperature=8);
@@ -28,6 +26,7 @@ Eigen::MatrixXf getSelfAdjacencyGraph(Eigen::MatrixXf& theta, Eigen::VectorXf we
 SPGraph getPlanarAdjacencyGraph(Graph& graph,
 		Eigen::MatrixXf& theta, Eigen::VectorXf weights,
 		std::vector<Eigen::Vector2i> centroids2, std::vector<Eigen::Vector4f> centroids3,
+		std::map<SuperPixelID, pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& superpixelClouds,
 		std::map<SuperPixelID, int>& spModelLookup, double mergeThreshold=0.0);
 
 void mergeNewScanGraph(SPGraph& original, SPGraph& incoming, double mergeThreshold=0.1);

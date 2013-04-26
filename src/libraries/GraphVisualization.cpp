@@ -94,7 +94,7 @@ std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(
 		eMarker.id = idIdx++;
 		eMarker.type = visualization_msgs::Marker::ARROW;
 
-		if (edge.partitionOn)
+		if (edge.currentState->partitionOn)
 		{
 			eMarker.action = visualization_msgs::Marker::ADD;
 		}

@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 2.6)
 project(MCMC CXX C)
 set(CMAKE_CXX_FLAGS "-std=c++0x -g")
-set(ROS_BUILD_TYPE Release)
+#set(ROS_BUILD_TYPE Release)
 
 include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #execute_process(COMMAND export "ROS_PACKAGE_PATH=${PROJECT_SOURCE_DIR}:$ROS_PACKAGE_PATH")
