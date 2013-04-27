@@ -17,10 +17,21 @@ MultiviewSegment::MultiviewSegment(long id)
 	probability = 1.0;
 }
 
+MultiviewSegment::MultiviewSegment(const MultiviewSegment& other)
+{
+	this->segmentID = other.segmentID;
+	this->plane = other.plane;
+	this->hash = other.hash;
+	this->probability = other.probability;
+
+	this->vertices = other.vertices;
+}
+
 void MultiviewSegment::computeFitPlane()
 {
 	/********** Concatenate Point Clouds **********/
 	std::cerr << "Computing fit plane for segment " << segmentID << " with " << vertices.size() << " nodes...";
+	if (vertices.size() == 0) return; // TODO: figure out what to do here...
 	pcl::PointCloud<pcl::PointXYZ>::Ptr segmentCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	for (std::set<SPGraph::vertex_descriptor>::iterator i = vertices.begin(); i != vertices.end(); i++)
 	{

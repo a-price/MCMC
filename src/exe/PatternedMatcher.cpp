@@ -47,9 +47,12 @@ int main(int argc, char** argv)
 		SPGraph::vertex_descriptor start = boost::random_vertex(spGraph, gen);
 
 		// Get the parent segment
-		MultiviewSegment segment = *(segmentation.getParentSegment(start));
+		MultiviewSegment* originalSegment = (segmentation.getParentSegment(start));
+		MultiviewSegment* targetSegment;
+		MultiviewSegment* originalSegmentB;
+		MultiviewSegment* targetSegmentB;
 
-		std::cerr << "Segment info: " << segment.segmentID << "\t" << segment.vertices.size() << std::endl;
+		std::cerr << "\nSegment info:\tID: " << originalSegment->segmentID << "\tVertices: " << originalSegment->vertices.size() << std::endl;
 
 		// Grow the superpixel into a connected component
 		std::set<SPGraph::vertex_descriptor> elements;
@@ -61,7 +64,7 @@ int main(int argc, char** argv)
 		{
 			std::cerr << "Splitting segment..." << std::endl;
 			// Split into a new segment
-			segmentation.addNewSegment(elements);
+			targetSegment = segmentation.addNewSegment(elements);
 		}
 		else
 		{
@@ -75,20 +78,29 @@ int main(int argc, char** argv)
 			std::set<MultiviewSegment*>::iterator iter = neighbors.begin();
 			std::advance(iter, neighborIdx);
 
-			MultiviewSegment* targetSegment = (*iter);
-
-			std::cerr << "Moving segment..." << std::endl;
-			// Add selected superpixels to that segment
-			segmentation.moveSuperpixels(elements, targetSegment);
-
+			targetSegment = (*iter);
 		}
 
-		// Compute target probability
-		std::cerr << "Computing probability..." << std::endl;
-		std::cerr << segmentation.computeProbability();
+
+		// Add selected superpixels to that segment
+		std::cerr << "Moving segment..." << std::endl;
+		originalSegmentB = (new MultiviewSegment(*originalSegment));
+		targetSegmentB = (new MultiviewSegment(*targetSegment));
+		segmentation.moveSuperpixels(elements, *originalSegment, *targetSegment, *originalSegmentB, *targetSegmentB);
 
 		// Compute M-H proposal ratio and accept move probabilistically
-		//double a =
+		long double a = MultiviewSegmentation::computeProposalRatio(*originalSegment, *targetSegment, *originalSegmentB, *targetSegmentB);
+		bool proposalAccepted = MathUtils::randbetween(0,1) < a;
+
+		if (proposalAccepted)
+		{
+			std::cerr << "\nMove Accepted.\n";
+		}
+		else
+		{
+			std::cerr << "\nMove Rejected.\n";
+		}
+
 
 		// Record state and score
 	}

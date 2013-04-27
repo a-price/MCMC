@@ -139,22 +139,23 @@ std::set<MultiviewSegment*> MultiviewSegmentation::getNeighborSegments(std::set<
 	return neighbors;
 }
 
-void MultiviewSegmentation::moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment* targetSegment)
+void MultiviewSegmentation::moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2)
 {
 	for (std::set<SPGraph::vertex_descriptor>::iterator i = elements.begin(); i != elements.end(); i++)
 	{
 		// Remove superpixels from other segments
-		MultiviewSegment* oldSegment = getParentSegment(*i);
-		oldSegment->vertices.erase(*i);
+		SB1.vertices.erase(*i);
 
 		// Add superpixel to new component
-		targetSegment->vertices.insert(*i);
+		SB2.vertices.insert(*i);
 
 		// Change parent segment in vertices
 		SPNode& vertex = mGraph[*i];
-		vertex.proposedState->currentSegmentID = targetSegment->segmentID;
+		vertex.proposedState->currentSegmentID = SB2.segmentID;
 	}
-	targetSegment->computeFitPlane();
+
+	SB1.computeFitPlane();
+	SB2.computeFitPlane();
 }
 
 void MultiviewSegmentation::getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth)
@@ -218,4 +219,10 @@ long double MultiviewSegmentation::computeProbability()
 	}
 
 	return probability;
+}
+
+long double MultiviewSegmentation::computeProposalRatio(MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2)
+{
+	// TODO: compute edge probabilities as well
+	return (SB1.computeProbability()*SB2.computeProbability())/(SA1.computeProbability()*SA2.computeProbability());
 }

@@ -41,11 +41,13 @@ public:
 
 	std::set<MultiviewSegment*> getNeighborSegments(std::set<SPGraph::vertex_descriptor> elements);
 
-	void moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment* targetSegment);
+	void moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2);
 
 	void getNewConnectedSet(SPGraph& graph, SPGraph::vertex_descriptor superpixel, std::set<SPGraph::vertex_descriptor>& elements, int depth = 0);
 
 	long double computeProbability();
+
+	static long double computeProposalRatio(MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2);
 
 };
 

@@ -24,6 +24,8 @@ public:
 
 	MultiviewSegment(long id);
 
+	MultiviewSegment(const MultiviewSegment& other);
+
 	void computeFitPlane();
 
 	long double computeProbability();
