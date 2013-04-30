@@ -31,19 +31,20 @@
 	
 \section{Related Work}
 	Myriad approaches have been proposed for the 3D image segmentation problem, including RANSAC-based model fitting, region growing, difference of normals, and graph cut methods, with many variations and combinations of these themes. For a general overview of segmentation methods applied to LIDAR captures, the reader is referred to \cite{douillard2011segmentation}. 
-	\cite{bleyer2005graph}
+	
+	For the similar problem of segmenting point clouds derived from colored stereo images, graph cuts have been shown to be effective for segmentation(\cite{bleyer2005graph}).
 
 	
-	We wish to strike out in a somewhat different direction from the main branch of research in this area in a couple of different ways. First, we choose to perform the segmentation simultaneously on the individual images, rather than fusing all of the images into a single point cloud or volume model. Second, we wish to
+	We wish to strike out in a somewhat different direction from the main branch of research in this area in a couple of different ways. First, we wish to avoid becoming trapped in a local convergence basin, a common limitation of greedy segmentation algorithms. To accomplish this, we employ a modified version of the Markov chain Monte Carlo method described by \cite{swendsen1987nonuniversal}, generalized to arbitrary probability densities by \cite{barbu2005generalizing}, and applied to RGB-D images by \cite{Erdogan12crv}. Such MCMC methods have proven relatively popular for reconstructing surfaces, as shown in \cite{tu2002image}, \cite{qiu2009jump}, and 	\cite{dick2002bayesian}.
 	
-	\cite{tu2002image}
-	\cite{qiu2009jump}
-	\cite{dick2002bayesian}
+	Second we choose to perform the segmentation simultaneously on the individual images, rather than fusing all of the images into a single point cloud or volume model. This allows the sampling algorithm to operate directly on the data as it was captured, rather than operating on an aggregated or fused model generated from many separate images.
+	
+	
 	
 	\todo[inline]{Mention papers discussed in previous.}
 \cite{metropolis1953equation}
-\cite{swendsen1987nonuniversal}
-\cite{barbu2005generalizing}
+
+
 
 \section{Procedure}
 
@@ -56,7 +57,7 @@
 	Armed with descriptions of both which superpixels are associated with one another and what model describes these segments, we can construct a full world description $W=(n,\pi_n,c_1,c_2,\ldots,c_n)$. The  This is the function we are trying to optimize via $W^*={\argmax}_{W\in\Omega} P(I|W)P(W)$. For our problem, the search space $\Omega$ is very large, with $\Omega=\bigcup_{n=1}^{|V|}\{\Omega_{\pi_n} \times\Omega_{l}^n \times\Omega_{\theta_1} \times\Omega_{\theta_2},\ldots, \times\Omega_{\theta_n}\}$.
 	
 	
-	\cite{metropolis1953equation}
+	
 	
 	
 	In order to accelerate the convergence
@@ -82,8 +83,6 @@ w_S&=\sqrt{(u_i-u_j)^2+(v_i-v_j)^2} \\
 	\label{eq:edgeProb}
 \end{equation}
 where $\mu_e$ is a random binary variable following a Bernoulli distribution and representing the state of an edge in a given sample, $w_\rho$ is a weight vector to account for the various units used (neighboring pixel distances might be on the order of 0.01m, while color differences might be on the order of 10 units), $\odot$ represents element-wise vector multiplication, and $T$ is a temperature factor.
-	
-
 
 \subsection{World Graph Generation}
 	Having generated a weighted superpixel adjacency graph for each image $I_t$ in the input sequence, we now wish to create a world graph $G'_t$ incorporating each individual image graph $G_t$ as a subgraph. $G'$ contains all vertices representing the superpixels, i.e., $V'_t=V'_{t-1}{\bigcup}V_t$. Additionally, this global graph contains all original edges, plus edges that we will add to relate the individual frames to each other, $E'_t=E'_{t-1}{\bigcup}E_t{\bigcup}E(\rho'_s,\rho_k)$,
@@ -99,6 +98,11 @@ where $\mu_e$ is a random binary variable following a Bernoulli distribution and
 
 Set of edges at time $t$ 
 \subsection{World Graph Sampling}
+	An initial partition $\pi_0$ is achieved by turning off edges in the graph according to edge weights $q_e$. The connected components following this operation are the initial segments $\{V_1,V_2,\ldots,V_n\}$. For each of these segments, we compute a best fit surface with parameters $\theta$. The probability of the full segmentation is \todo[inline]{P(pi)}
+
+	We wish to now sample this graph-based configuration space in proportion to the posterior probability density. As shown in  \cite{metropolis1953equation}, this can be achieved even with an unknown posterior function by introducing an acceptance ratio $a$ for a new proposed state as $a=\frac{P(x')}{P(x_t)}$, where $x'$ is a proposed state and $x_t$ is the current state. Proposed states producing $a\geq 1$ are accepted automatically, while others are accepted with probability $a$.
+	
+	The discriminative probabilities $q_e$ on each edge form the basis for the proposal density for generating new $x'$s. Algorithmically, this is implemented by randomly selecting a superpixel and recursively growing the region probabilistically according to the edge weights.
 
 \begin{equation}
 \alpha(S^{A}\rightarrow S^{B})=\frac{\prod_{e\in E(C^{*},V_{1}-C^{*})}(1-q_{e})\, q(V_{1}|C^{*},S^{B})\, p(S^{B}|Z)}{\prod_{e\in E(C^{*},V_{2}-C^{*})}(1-q_{e})\, q(V_{2}|C^{*},S^{A})\, p(S^{A}|Z)}\label{eq: acceptanceRatio}
@@ -109,7 +113,6 @@ Set of edges at time $t$
  & = & \frac{P(S_{1}^{B}|Z)P(S_{2}^{B}|Z)}{P(S_{1}^{A}|Z)P(S_{2}^{A}|Z)}\label{eq:jumpProb}
 \end{eqnarray}
 
-\[a=\frac{P(x')}{P(x_t)}\]
 
 	$I_t$ RGB-D Image at time $t$ This represents the stream of images to be segmented
 
@@ -118,6 +121,14 @@ $E'_t(\pi)\subset{E'_t}$ Set of edges turned on for partition $\pi$ at time $t$
 \section{Results}
 
 \cite{sturm12iros}
+\begin{figure}[here]
+\begin{center}
+\includegraphics[width=.9\linewidth]{graph1.png}
+\end{center}
+
+\caption{3D adjacency graph with one S-W cut highlighted.}
+\label{fig:highGraph}
+\end{figure}
 
 \section{Conclusions}
 

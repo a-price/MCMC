@@ -55,7 +55,7 @@ const std::string paramFilename = "/home/arprice/fuerte_workspace/sandbox/MCMC/b
 const std::string colorTopic = "/camera/rgb/image_color";
 const std::string depthTopic = "/camera/depth/image";
 const std::string pointTopic = "/camera/rgb/points";
-const int MIN_SEGMENT_SIZE = 50;
+const int MIN_SEGMENT_SIZE = 100;
 
 ros::Publisher superPixelPub;
 ros::Publisher hyperPixelPub;
@@ -355,6 +355,8 @@ void segment(cv::Mat d, cv::Mat c,
 		gCentroid = cameraFrameTF * centroid;
 		gCentroids.push_back(gCentroid);
 
+		std::cerr << iter->second->plane_->density_.covariance() << std::endl << iter->second->plane_->density_.covariance().determinant() << std::endl;
+
 		Eigen::Quaterniond q;
 		q.setFromTwoVectors(Eigen::Vector3d(theta[0],theta[1],theta[2]), Eigen::Vector3d::UnitX());
 
@@ -393,10 +395,10 @@ void segment(cv::Mat d, cv::Mat c,
 	SPGraph g = getPlanarAdjacencyGraph(graph,
 			Theta, weights,
 			spCenters, gCentroids,
-			superpixelClouds, spModelLookup, 0.05);//getSelfAdjacencyGraph(Theta, 0.5);
+			superpixelClouds, spModelLookup, 0.01);//getSelfAdjacencyGraph(Theta, 0.5);
 	//writeOrderedGraph(g, "graph.dot", spCenters);
 
-	mergeNewScanGraph(spGraph, g, 0.4);
+	mergeNewScanGraph(spGraph, g, 0.2);
 
 	std::vector<visualization_msgs::MarkerArray> mArrays;
 	mArrays = GraphVisualization::VisualizeGraph(spGraph);

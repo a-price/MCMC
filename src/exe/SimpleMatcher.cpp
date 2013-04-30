@@ -22,7 +22,7 @@
 
 int main(int argc, char** argv)
 {
-	ros::init(argc, argv, "simple_seg");
+	ros::init(argc, argv, "simple_matcher");
 	ros::NodeHandle nh;
 
 	ros::Publisher nodePub;

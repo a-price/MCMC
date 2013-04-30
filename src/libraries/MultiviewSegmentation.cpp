@@ -224,5 +224,5 @@ long double MultiviewSegmentation::computeProbability()
 long double MultiviewSegmentation::computeProposalRatio(MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2)
 {
 	// TODO: compute edge probabilities as well
-	return (SB1.computeProbability()*SB2.computeProbability())/(SA1.computeProbability()*SA2.computeProbability());
+	return (SB1.computeProbability()/SA1.computeProbability())*(SB2.computeProbability()/SA2.computeProbability());
 }

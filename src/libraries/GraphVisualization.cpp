@@ -10,7 +10,8 @@
 
 GraphVisualization::GraphVisualization()
 {
-	// TODO Initialize color Array
+	nodePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_nodes_iter", 0 );
+	edgePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_edges_iter", 0 );
 
 }
 
@@ -19,9 +20,129 @@ GraphVisualization::~GraphVisualization()
 	// TODO Auto-generated destructor stub
 }
 
+void GraphVisualization::VisualizeGraphStep(SPGraph& graph, std::set<SPGraph::vertex_descriptor>& proposedComponent, MultiviewSegmentation& segmentation)
+{
+	/********** Generate Node Markers **********/
+	visualization_msgs::MarkerArray thetas;
+	pcl::PointCloud<pcl::PointXYZRGB> cloud;
+	sensor_msgs::PointCloud2 pcMsg;
+	SPGraph::vertex_iterator vertexIt, vertexEnd;
+	boost::tie(vertexIt, vertexEnd) = boost::vertices(graph);
+	for (; vertexIt != vertexEnd; ++vertexIt)
+	{
+		SPGraph::vertex_descriptor vertexID = *vertexIt; // dereference vertexIt, get the ID
+		SPNode & vertex = graph[vertexID];
+
+		Eigen::Quaternionf q;
+		q.setFromTwoVectors(Eigen::Vector3f(
+				vertex.modelParams[0],vertex.modelParams[1],
+				vertex.modelParams[2]), Eigen::Vector3f::UnitX());
+
+		visualization_msgs::Marker marker;
+		marker.header.frame_id = "world";
+		//marker.header.stamp = headerTime;
+		marker.ns = "MCMC";
+		marker.id = (int)vertexID;
+		marker.type = visualization_msgs::Marker::SPHERE;
+		marker.action = visualization_msgs::Marker::ADD;
+		marker.pose.position.x = vertex.position[0];
+		marker.pose.position.y = vertex.position[1];
+		marker.pose.position.z = vertex.position[2];
+		marker.pose.orientation.x = q.x();
+		marker.pose.orientation.y = q.y();
+		marker.pose.orientation.z = q.z();
+		marker.pose.orientation.w = q.w();
+		marker.scale.x = 0.02;
+		marker.scale.y = 0.02;
+		marker.scale.z = 0.02;
+		marker.color.a = 1.0; // based on # & weight of connections
+
+		if (proposedComponent.find(vertexID) != proposedComponent.end())
+		{
+			marker.color.r = 1.0; //
+			marker.color.g = 1.0; //
+			marker.color.b = 0.0;
+		}
+		else
+		{
+			marker.color.r = 0.0; //
+			marker.color.g = 0.0; //
+			marker.color.b = 1.0;
+		}
+		thetas.markers.push_back(marker);
+	}
+
+	/********** Generate Edge Markers **********/
+	visualization_msgs::MarkerArray qs;
+	int idIdx = 0;
+	SPGraph::edge_iterator edgeIt, edgeEnd;
+	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
+	for (; edgeIt != edgeEnd; ++edgeIt)
+	{
+		SPGraph::edge_descriptor edgeID = *edgeIt; // dereference edgeIt, get the ID
+		SPEdge & edge = graph[edgeID];
+
+		SPGraph::vertex_descriptor aID, bID;
+		aID = boost::source(edgeID, graph);
+		bID = boost::target(edgeID, graph);
+		SPNode & a = graph[aID];
+		SPNode & b = graph[bID];
+
+		geometry_msgs::Point pa, pb;
+		pa.x=a.position[0]; pa.y=a.position[1]; pa.z=a.position[2];
+		pb.x=b.position[0]; pb.y=b.position[1]; pb.z=b.position[2];
+
+		visualization_msgs::Marker eMarker;
+		eMarker.header.frame_id = "/world";
+		eMarker.ns = "MCMC";
+		eMarker.id = idIdx++;
+		eMarker.type = visualization_msgs::Marker::ARROW;
+
+		if (edge.currentState->partitionOn)
+		{
+			eMarker.action = visualization_msgs::Marker::ADD;
+		}
+		else
+		{
+			eMarker.action = visualization_msgs::Marker::DELETE;
+		}
+
+		if (proposedComponent.find(aID) != proposedComponent.end() &&
+			proposedComponent.find(bID) != proposedComponent.end())
+		{
+			eMarker.color.r = 0.75; //
+			eMarker.color.g = 0.75; //
+			eMarker.color.b = 0.0;
+			eMarker.color.a = 1.0;
+		}
+		else
+		{
+			eMarker.color.r = 0.05; //
+			eMarker.color.g = 0.05; //
+			eMarker.color.b = 0.05;
+			eMarker.color.a = 0.75;
+		}
+
+
+		eMarker.points.push_back(pa);
+		eMarker.points.push_back(pb);
+
+		eMarker.scale.z = 0; // remove head?
+
+		float lineScale = 0.025;
+
+		eMarker.scale.x = lineScale * edge.BernoulliProbability;
+		eMarker.scale.y = eMarker.scale.x;
+		qs.markers.push_back(eMarker);
+	}
+
+	nodePub.publish(thetas);
+	edgePub.publish(qs);
+}
+
 
 // TODO: Add filters for small superpixels and weak edges
-std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(SPGraph graph)
+std::vector<visualization_msgs::MarkerArray> GraphVisualization::VisualizeGraph(SPGraph& graph)
 {
 	std::vector<visualization_msgs::MarkerArray> mArrays;
 

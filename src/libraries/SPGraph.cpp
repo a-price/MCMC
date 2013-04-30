@@ -99,7 +99,8 @@ double SPNode::getErrorForPlaneModel(Eigen::Vector4f& planeCoefficients)
 
 		sum += dist;
 	}
-	return sum;
+	//return sum;
+	return sum/subCloud->points.size();
 }
 
 SPEdge::SPEdge()

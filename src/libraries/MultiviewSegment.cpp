@@ -14,7 +14,7 @@ MultiviewSegment::MultiviewSegment(long id)
 {
 	segmentID = id;
 	hash = 0;
-	probability = 1.0;
+	probability = 0.0;
 }
 
 MultiviewSegment::MultiviewSegment(const MultiviewSegment& other)
@@ -67,8 +67,8 @@ void MultiviewSegment::computeFitPlane()
 
 long double MultiviewSegment::computeProbability()
 {
-	probability = 1.0;
-	double localErr = 0;
+	probability = 0.0;
+	long double localErr = 0;
 
 	// Get total error for segment
 	for (std::set<SPGraph::vertex_descriptor>::iterator i = vertices.begin(); i != vertices.end(); i++)
@@ -79,8 +79,15 @@ long double MultiviewSegment::computeProbability()
 
 	// P(Zi|Si,Theta i)
 	probability = exp(-localErr/2.0)*sqrt((2.0*M_PI)*plane.covariance.determinant());
-	if (isnan(probability)) {std::cerr << " NaN detected. " << localErr << " " << plane.covariance.determinant();}
-	if (probability < 1.0^-20) {std::cerr << " zero detected. " << probability << " " << localErr << " " << plane.covariance.determinant();}
+	//probabilityL = (-localErr/2.0);
+	if (isnan(probability))
+	{
+		std::cerr << " NaN detected. " << localErr << " " << plane.covariance.determinant();
+		probability = 0;
+		return probability;
+	}
+	//if (probability < pow(1.0, -20.0)) {std::cerr << " zero detected. " << probability << " " << localErr << " " << plane.covariance.determinant();}
+	std::cerr << "\tProbability: " << probability << " " << localErr << " " << plane.covariance.determinant();
 
 	return probability;
 }

@@ -5,6 +5,11 @@
  *  \date Apr 19, 2013
  *  \author Andrew Price
  */
+#define USE_ROS
+
+#ifdef USE_ROS
+#include "GraphVisualization.h"
+#endif
 
 #include "GraphUtils.h"
 #include <Eigen/Core>
@@ -19,10 +24,19 @@
 #include "Serialization.h"
 #include "MultiviewProblem.h"
 
-const int NUM_ITERATIONS = 10;
+
+
+const int NUM_ITERATIONS = 20;
 
 int main(int argc, char** argv)
 {
+#ifdef USE_ROS
+	ros::init(argc, argv, "simple_matcher");
+
+	GraphVisualization gViz;
+	ros::Rate rate(0.5);
+#endif
+
 	srand(time(NULL));
 
 	boost::shared_ptr<SPGraph> gPtr(new SPGraph);
@@ -62,7 +76,7 @@ int main(int argc, char** argv)
 		double moveType = MathUtils::randbetween(0,1);
 		if (moveType < 0.10)
 		{
-			std::cerr << "Splitting segment..." << std::endl;
+			std::cerr << "Splitting segment...";
 			// Split into a new segment
 			targetSegment = segmentation.addNewSegment(elements);
 		}
@@ -72,12 +86,17 @@ int main(int argc, char** argv)
 			// Pick a neighboring segment
 			std::set<MultiviewSegment*> neighbors = segmentation.getNeighborSegments(elements);
 			if (neighbors.size() < 1)
-				{ continue; }
+			{
+				std::cerr << "no neighbors." << std::endl;
+				continue;
+			}
 			int neighborIdx = round(MathUtils::randbetween(0,neighbors.size()-1));
-			//std::cerr << neighbors.size();
+			std::cerr << neighborIdx << "->";
+
 			std::set<MultiviewSegment*>::iterator iter = neighbors.begin();
 			std::advance(iter, neighborIdx);
 
+			std::cerr << (*iter)->segmentID << "...";
 			targetSegment = (*iter);
 		}
 
@@ -103,6 +122,11 @@ int main(int argc, char** argv)
 
 
 		// Record state and score
+#ifdef USE_ROS
+		gViz.VisualizeGraphStep(spGraph, elements, segmentation);
+		ros::spinOnce();
+		rate.sleep();
+#endif
 	}
 
 }
