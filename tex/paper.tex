@@ -27,8 +27,7 @@
 \section{Introduction}
 	Any introduction to a discussion on modern 3D image segmentation or reconstruction ought to begin with an acknowledgement of the impact of consumer RGB-D cameras like the Microsoft Kinect and its brethren from Asus and PrimeSense. Following the Kinect's release in late 2010, there has been an explosion of academic, commercial, and hobbyist applications for the relatively inexpensive devices, spanning such diverse topics as simultaneous localization and mapping, additive manufacturing, visual servoing, and the original purpose of novel user interfaces. Thus, the benefits of developing and extending algorithms that operate on these types of RGB-D data must be readily apparent to the reader.
 	
-	Much of this research has focused on methods of reconstructing an environment geometrically, first using sparse, point-based methods (\cite{henry2010rgb}), then moving more towards volumetric dense methods. Many recent advances in the real-time integration of RGB-D images, such as KinectFusion (\cite{newcombe2011kinectfusion}) or Kintinuous (\cite{whelan2012kintinuous}) have leveraged modern general-purpose graphical processors (GPGPUs).
-	\todo[inline]{Finish brief history.}
+	Much of this research has focused on methods of reconstructing an environment geometrically, first using sparse, point-based methods (\cite{henry2010rgb}), then moving more towards volumetric dense methods. Many recent advances in the real-time integration of RGB-D images, such as KinectFusion (\cite{newcombe2011kinectfusion}) or Kintinuous (\cite{whelan2012kintinuous}) have leveraged modern general-purpose graphical processors (GPGPUs). While there are still a number of exciting challenges in the realm of geometric reconstruction, we will look ahead to the work of understanding content within a scene, beginning with image segmentation.
 	
 \section{Related Work}
 	Myriad approaches have been proposed for the 3D image segmentation problem, including RANSAC-based model fitting, region growing, difference of normals, and graph cut methods, with many variations and combinations of these themes. For a general overview of segmentation methods applied to LIDAR captures, the reader is referred to \cite{douillard2011segmentation}. 
@@ -36,16 +35,9 @@
 	For the similar problem of segmenting point clouds derived from colored stereo images, graph cuts have been shown to be effective for segmentation(\cite{bleyer2005graph}).
 
 	
-	We wish to strike out in a somewhat different direction from the main branch of research in this area in a couple of different ways. First, we wish to avoid becoming trapped in a local convergence basin, a common limitation of greedy segmentation algorithms. To accomplish this, we employ a modified version of the Markov chain Monte Carlo method described by \cite{swendsen1987nonuniversal}, generalized to arbitrary probability densities by \cite{barbu2005generalizing}, and applied to RGB-D images by \cite{Erdogan12crv}. Such MCMC methods have proven relatively popular for reconstructing surfaces, as shown in \cite{tu2002image}, \cite{qiu2009jump}, and 	\cite{dick2002bayesian}.
+	We wish to strike out in a somewhat different direction from the main branch of research in this area in a couple of different ways. First, we wish to avoid becoming trapped in a local convergence basin, a common limitation of greedy segmentation algorithms. To accomplish this, we employ a modified version of the Markov chain Monte Carlo method described by Swendsen and Wang in 1987 (\cite{swendsen1987nonuniversal}), generalized to arbitrary probability densities by Barbu and Zhu in \cite{barbu2005generalizing}, and applied to RGB-D images by Erdogan, Paluri, and Dellaert in \cite{Erdogan12crv}. Such MCMC methods have proven relatively popular for reconstructing surfaces, as shown in \cite{tu2002image}, \cite{qiu2009jump}, and 	\cite{dick2002bayesian}.
 	
 	Second we choose to perform the segmentation simultaneously on the individual images, rather than fusing all of the images into a single point cloud or volume model. This allows the sampling algorithm to operate directly on the data as it was captured, rather than operating on an aggregated or fused model generated from many separate images.
-	
-	
-	
-% \todo[inline]{Mention papers discussed in previous.}
-% \cite{metropolis1953equation}
-
-
 
 \section{Procedure}
 
@@ -73,7 +65,7 @@ w_S&=\sqrt{(u_i-u_j)^2+(v_i-v_j)^2} \\
 	q_e=P(\mu_e=on|\rho_s,\rho_t)=e^{\|w_\rho\odot(\rho_s-\rho_t)\|^2\frac{T}{2}}
 	\label{eq:edgeProb}
 \end{equation}
-where $\mu_e$ is a random binary variable following a Bernoulli distribution and representing the state of an edge in a given sample, $w_\rho$ is a weight vector to account for the various units used (neighboring pixel distances might be on the order of 0.01m, while color differences might be on the order of 10 units), $\odot$ represents element-wise vector multiplication, and $T$ is a temperature factor.
+where $\mu_e$ is a random binary variable following a Bernoulli distribution and representing the state of an edge in a given sample, $w_\rho$ is a weight vector to account for the various units used (neighboring pixel distances might be on the order of 0.01m, while color differences might be on the order of 10 units), $\odot$ represents element-wise vector multiplication, and $T$ is a temperature factor. In this implementation, $\rho$ is composed of the plane parameters and centroid for each superpixel, but color or normal histograms have also been used.
 
 \subsection{World Graph Generation}
 	Having generated a weighted superpixel adjacency graph for each image $I_t$ in the input sequence, we now wish to create a world graph $G'_t$ incorporating each individual image graph $G_t$ as a subgraph. $G'$ contains all vertices representing the superpixels, i.e.,
@@ -148,12 +140,12 @@ a(\pi^{A}\rightarrow \pi^{B})=\frac{\prod_{e\in E(C^{*},V_{a}-C^{*})}(1-q_{e})\,
 
 \section{Conclusions}
 \subsection{Strengths}
-	The techniques presented here appear to be a strong initial attempt at generating a simultaneous segmentation for registered RGB-D images. 
+	The techniques presented here appear to be a strong initial attempt at generating a simultaneous segmentation for registered RGB-D images. The values selected for generating the discriminative probabilities, $\rho$ and $q_e$, generate graphs that are strongly connected to other nodes within the same plane, and weakly coupled to other parts of the environment. The full implementation must be completed before a final assessment of the accuracy of the segmentation can be carried out, however.
 \subsection{Potential Improvements}
 
 	Perhaps the most direct potential improvement would be to optimize the camera poses with respect to the computed segmentation. Currently, the results shown use the recorded ground truth positions for the camera extrinsic parameters. In a more realistic scenario, this information is unlikely to be provided, so correctly matching surface models would provide a potential way to inform a pose-graph optimization using something like GTSAM (\cite{gtsam}).
 	
-	Perhaps one of the more significant challenges to address going forward is the issue of overconnected components. For example, imagine a segment that contains $n$ superpixels: $V_1=\{v_1,v_2,\ldots,v_n\}$. If there are strong correspondences between the best fit planes for the segments, which there ought to be if the data truly does correspond to the same underlying surface, then the subgraph of $V_1$ will be very densely connected, perhaps even a complete graph. For this situation, even with relatively low probabilities on each edge, there is a strong chance that the recursive growth algorithm will still select the entire segment, as each node has $\approx n$ chances to be selected into the connected component. One proposed method to combat this issue would be to create a maximum probability spanning tree starting with the selected root superpixel. This would mean that each node is only added to the component with a probability equal to the most likely path, rather than the cumulative probability of all of the possible paths.
+	One of the more significant challenges to address going forward is the issue of overconnected components. For example, imagine a segment that contains $n$ superpixels: $V_1=\{v_1,v_2,\ldots,v_n\}$. If there are strong correspondences between the best fit planes for the segments, which there ought to be if the data truly does correspond to the same underlying surface, then the subgraph of $V_1$ will be very densely connected, perhaps even a complete graph. For this situation, even with relatively low probabilities on each edge, there is a strong chance that the recursive growth algorithm will still select the entire segment, as each node has $\approx n$ chances to be selected into the connected component. One proposed method to combat this issue would be to create a maximum probability spanning tree starting with the selected root superpixel. This would mean that each node is only added to the component with a probability equal to the most likely path, rather than the cumulative probability of all of the possible paths.
 
 \bibliography{references}
 \bibliographystyle{unsrt}
