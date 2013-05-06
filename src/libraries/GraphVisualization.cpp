@@ -13,6 +13,7 @@ GraphVisualization::GraphVisualization()
 	nodePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_nodes_iter", 0 );
 	edgePub = nh.advertise<visualization_msgs::MarkerArray>( "graph_edges_iter", 0 );
 
+	cloudPub = nh.advertise<sensor_msgs::PointCloud2>( "cloud_seg_iter", 0 );
 }
 
 GraphVisualization::~GraphVisualization()
@@ -32,12 +33,14 @@ void GraphVisualization::VisualizeGraphStep(SPGraph& graph, std::set<SPGraph::ve
 	{
 		SPGraph::vertex_descriptor vertexID = *vertexIt; // dereference vertexIt, get the ID
 		SPNode & vertex = graph[vertexID];
+		MultiviewSegment* segment = segmentation.segmentsMap.find( vertex.currentState->currentSegmentID)->second;
 
 		Eigen::Quaternionf q;
 		q.setFromTwoVectors(Eigen::Vector3f(
 				vertex.modelParams[0],vertex.modelParams[1],
 				vertex.modelParams[2]), Eigen::Vector3f::UnitX());
 
+		// Create a marker to show parameters
 		visualization_msgs::Marker marker;
 		marker.header.frame_id = "world";
 		//marker.header.stamp = headerTime;
@@ -65,15 +68,28 @@ void GraphVisualization::VisualizeGraphStep(SPGraph& graph, std::set<SPGraph::ve
 		}
 		else
 		{
-			marker.color.r = 0.0; //
-			marker.color.g = 0.0; //
-			marker.color.b = 1.0;
+			marker.color.r = segment->r; //
+			marker.color.g = segment->g; //
+			marker.color.b = segment->b;
 		}
 		thetas.markers.push_back(marker);
+
+		// Add points from segment to point cloud
+		for(int p = 0; p < vertex.subCloud->points.size(); p++)
+		{
+			pcl::PointXYZRGB point;
+			point.x = vertex.subCloud->points[p].x;
+			point.y = vertex.subCloud->points[p].y;
+			point.z = vertex.subCloud->points[p].z;
+			point.r = segment->r;
+			point.g = segment->g;
+			point.b = segment->b;
+			cloud.points.push_back(point);
+		}
 	}
 
 	/********** Generate Edge Markers **********/
-	visualization_msgs::MarkerArray qs;
+	visualization_msgs::MarkerArray mus;
 	int idIdx = 0;
 	SPGraph::edge_iterator edgeIt, edgeEnd;
 	boost::tie(edgeIt, edgeEnd) = boost::edges(graph);
@@ -133,11 +149,15 @@ void GraphVisualization::VisualizeGraphStep(SPGraph& graph, std::set<SPGraph::ve
 
 		eMarker.scale.x = lineScale * edge.BernoulliProbability;
 		eMarker.scale.y = eMarker.scale.x;
-		qs.markers.push_back(eMarker);
+		mus.markers.push_back(eMarker);
 	}
 
+	pcl::toROSMsg(cloud, pcMsg);
+	pcMsg.header.frame_id="/world";
+
 	nodePub.publish(thetas);
-	edgePub.publish(qs);
+	edgePub.publish(mus);
+	cloudPub.publish(pcMsg);
 }
 
 

@@ -10,6 +10,7 @@
 #define GRAPHVISUALIZATION_H_
 
 #include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <Eigen/Core>
@@ -25,6 +26,7 @@ public:
 	ros::NodeHandle nh;
 	ros::Publisher nodePub;
 	ros::Publisher edgePub;
+	ros::Publisher cloudPub;
 
 
 	GraphVisualization();

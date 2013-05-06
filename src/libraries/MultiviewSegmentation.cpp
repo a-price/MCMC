@@ -41,6 +41,7 @@ MultiviewSegmentation::MultiviewSegmentation(SPGraph& graph) :
 		MultiviewSegment segment(i);
 		segment.segmentID = i;
 		segments.push_back(segment);
+		segmentsMap.insert(std::pair<long, MultiviewSegment*>(segment.segmentID, &segments[segments.size()-1]));
 	}
 
 	// Add superpixels to segments
@@ -103,6 +104,7 @@ MultiviewSegment* MultiviewSegmentation::addNewSegment(std::set<SPGraph::vertex_
 	newSegment->computeFitPlane();
 
 	segments.push_back(*newSegment);
+	segmentsMap.insert(std::pair<long, MultiviewSegment*>(newSegment->segmentID, &segments[segments.size()-1]));
 
 	return &segments[segments.size()-1];
 }
@@ -137,6 +139,50 @@ std::set<MultiviewSegment*> MultiviewSegmentation::getNeighborSegments(std::set<
 	}
 
 	return neighbors;
+}
+
+SegmentGraph MultiviewSegmentation::getSegmentGraph()
+{
+	SegmentGraph sGraph;
+	std::map<long, SPGraph::vertex_descriptor> graphLookup;
+
+	// Add nodes for all segments
+	for (size_t segment = 0; segment < segments.size(); segment++)
+	{
+		SegmentGraph::vertex_descriptor v = boost::add_vertex(sGraph);
+		graphLookup.insert(std::pair<long, SegmentGraph::vertex_descriptor>(segments[segment].segmentID , v));
+
+		// give the segment a random color
+		int r = rand() % 255, g = rand() % 255, b = rand() % 255;
+		SegmentGraphNode& node = sGraph[v];
+		node.segmentID = segments[segment].segmentID;
+		node.r = r;
+		node.g = g;
+		node.b = b;
+	}
+
+	// If two segments have adjacent superpixels, connect them.
+	for (size_t segment = 0; segment < segments.size(); segment++)
+	{
+		std::set<SPGraph::vertex_descriptor> vertices = segments[segment].vertices;
+		std::set<MultiviewSegment*> neighbors = getNeighborSegments(vertices);
+
+		for (std::set<MultiviewSegment*>::iterator i = neighbors.begin(); i != neighbors.end(); std::advance(i, 1))
+		{
+			MultiviewSegment* neighbor = *i;
+			SegmentGraph::vertex_descriptor i = graphLookup.find(segments[segment].segmentID)->second;
+			SegmentGraph::vertex_descriptor j = graphLookup.find(neighbor->segmentID)->second;
+
+			SegmentGraph::edge_descriptor e = boost::add_edge(i, j, sGraph).first;
+		}
+	}
+
+	return sGraph;
+}
+
+void MultiviewSegmentation::colorSegmentGraph(SegmentGraph& sGraph)
+{
+	int r = rand() % 255, g = rand() % 255, b = rand() % 255;
 }
 
 void MultiviewSegmentation::moveSuperpixels(std::set<SPGraph::vertex_descriptor> elements, MultiviewSegment& SA1, MultiviewSegment& SA2, MultiviewSegment& SB1, MultiviewSegment& SB2)

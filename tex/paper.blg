@@ -1,0 +1,49 @@
+This is BibTeX, Version 0.99c (TeX Live 2009/Debian)
+The top-level auxiliary file: paper.aux
+The style file: unsrt.bst
+Database file #1: references.bib
+Warning--empty journal in whelan2012kintinuous
+Warning--empty journal in gtsam
+Warning--there's a number but no volume in gtsam
+You've used 18 entries,
+            1791 wiz_defined-function locations,
+            553 strings with 6796 characters,
+and the built_in function-call counts, 4860 in all, are:
+= -- 415
+> -- 234
+< -- 7
++ -- 85
+- -- 67
+* -- 319
+:= -- 743
+add.period$ -- 59
+call.type$ -- 18
+change.case$ -- 18
+chr.to.int$ -- 0
+cite$ -- 21
+duplicate$ -- 237
+empty$ -- 478
+format.name$ -- 67
+if$ -- 1124
+int.to.chr$ -- 0
+int.to.str$ -- 18
+missing$ -- 18
+newline$ -- 93
+num.names$ -- 18
+pop$ -- 74
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 121
+stack$ -- 0
+substring$ -- 280
+swap$ -- 75
+text.length$ -- 7
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 3
+while$ -- 41
+width$ -- 20
+write$ -- 199
+(There were 3 warnings)

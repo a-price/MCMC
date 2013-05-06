@@ -22,6 +22,8 @@ public:
 	long hash;										///< Represents the set of superpixels and the type
 	long double probability;						///< The probability of the Z_ given S_i, P(Z_i|S_i)
 
+	int r,g,b;
+
 	MultiviewSegment(long id);
 
 	MultiviewSegment(const MultiviewSegment& other);

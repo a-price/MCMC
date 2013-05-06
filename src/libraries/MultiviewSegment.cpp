@@ -15,6 +15,9 @@ MultiviewSegment::MultiviewSegment(long id)
 	segmentID = id;
 	hash = 0;
 	probability = 0.0;
+	r = rand() % 255;
+	g = rand() % 255;
+	b = rand() % 255;
 }
 
 MultiviewSegment::MultiviewSegment(const MultiviewSegment& other)

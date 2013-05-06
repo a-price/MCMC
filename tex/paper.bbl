@@ -1,0 +1,111 @@
+\begin{thebibliography}{10}
+
+\bibitem{henry2010rgb}
+Peter Henry, Michael Krainin, Evan Herbst, Xiaofeng Ren, and Dieter Fox.
+\newblock Rgb-d mapping: Using depth cameras for dense 3d modeling of indoor
+  environments.
+\newblock In {\em the 12th International Symposium on Experimental Robotics
+  (ISER)}, volume~20, pages 22--25, 2010.
+
+\bibitem{newcombe2011kinectfusion}
+Richard~A Newcombe, Andrew~J Davison, Shahram Izadi, Pushmeet Kohli, Otmar
+  Hilliges, Jamie Shotton, David Molyneaux, Steve Hodges, David Kim, and Andrew
+  Fitzgibbon.
+\newblock Kinectfusion: Real-time dense surface mapping and tracking.
+\newblock In {\em Mixed and Augmented Reality (ISMAR), 2011 10th IEEE
+  International Symposium on}, pages 127--136. IEEE, 2011.
+
+\bibitem{whelan2012kintinuous}
+Thomas Whelan, Michael Kaess, Maurice Fallon, Hordur Johannsson, John Leonard,
+  and John McDonald.
+\newblock Kintinuous: Spatially extended kinectfusion.
+\newblock 2012.
+
+\bibitem{douillard2011segmentation}
+Bertrand Douillard, J~Underwood, N~Kuntz, V~Vlaskine, A~Quadros, P~Morton, and
+  A~Frenkel.
+\newblock On the segmentation of 3d lidar point clouds.
+\newblock In {\em Robotics and Automation (ICRA), 2011 IEEE International
+  Conference on}, pages 2798--2805. IEEE, 2011.
+
+\bibitem{bleyer2005graph}
+Michael Bleyer and Margrit Gelautz.
+\newblock Graph-based surface reconstruction from stereo pairs using image
+  segmentation.
+\newblock In {\em Electronic Imaging 2005}, pages 288--299. International
+  Society for Optics and Photonics, 2005.
+
+\bibitem{swendsen1987nonuniversal}
+R.H. Swendsen and J.S. Wang.
+\newblock Nonuniversal critical dynamics in monte carlo simulations.
+\newblock {\em Physical Review Letters}, 58(2):86, 1987.
+
+\bibitem{barbu2005generalizing}
+A.~Barbu and S.C. Zhu.
+\newblock Generalizing {S}wendsen-{W}ang to sampling arbitrary posterior
+  probabilities.
+\newblock {\em Pattern Analysis and Machine Intelligence, IEEE Transactions
+  on}, 27(8):1239--1253, 2005.
+
+\bibitem{Erdogan12crv}
+Can Erdogan, Manohar Paluri, and Frank Dellaert.
+\newblock Planar segmentation of rgbd images using fast linear fitting and
+  markov chain monte carlo.
+\newblock In {\em Computer and Robot Vision}, 2012.
+
+\bibitem{tu2002image}
+Zhuowen Tu and Song-Chun Zhu.
+\newblock Image segmentation by data-driven markov chain monte carlo.
+\newblock {\em Pattern Analysis and Machine Intelligence, IEEE Transactions
+  on}, 24(5):657--673, 2002.
+
+\bibitem{qiu2009jump}
+Peihua Qiu.
+\newblock Jump-preserving surface reconstruction from noisy data.
+\newblock {\em Annals of the Institute of Statistical Mathematics},
+  61(3):715--751, 2009.
+
+\bibitem{dick2002bayesian}
+Anthony~R Dick, Philip~HS Torr, and Roberto Cipolla.
+\newblock A bayesian estimation of building shape using mcmc.
+\newblock In {\em Computer Vision-ECCV 2002}, pages 852--866. Springer, 2002.
+
+\bibitem{felzenszwalb2004efficient}
+Pedro~F. Felzenszwalb and Daniel~P. Huttenlocher.
+\newblock Efficient graph-based image segmentation.
+\newblock {\em International Journal of Computer Vision}, 59(2):167--181, 2004.
+
+\bibitem{metropolis1953equation}
+N.~Metropolis, A.W. Rosenbluth, M.N. Rosenbluth, A.H. Teller, and E.~Teller.
+\newblock Equation of state calculations by fast computing machines.
+\newblock {\em The journal of chemical physics}, 21:1087, 1953.
+
+\bibitem{sturm12iros}
+J.~Sturm, N.~Engelhard, F.~Endres, W.~Burgard, and D.~Cremers.
+\newblock A benchmark for the evaluation of rgb-d slam systems.
+\newblock In {\em Proc. of the International Conference on Intelligent Robot
+  Systems (IROS)}, Oct. 2012.
+
+\bibitem{ros2009}
+Morgan Quigley, Ken Conley, Brian~P. Gerkey, Josh Faust, Tully Foote, Jeremy
+  Leibs, Rob Wheeler, and Andrew~Y. Ng.
+\newblock Ros: an open-source robot operating system.
+\newblock In {\em ICRA Workshop on Open Source Software}, 2009.
+
+\bibitem{opencv_library}
+G.~Bradski.
+\newblock {The OpenCV Library}.
+\newblock {\em Dr. Dobb's Journal of Software Tools}, 2000.
+
+\bibitem{rusu20113d}
+Radu~Bogdan Rusu and Steve Cousins.
+\newblock 3d is here: Point cloud library (pcl).
+\newblock In {\em Robotics and Automation (ICRA), 2011 IEEE International
+  Conference on}, pages 1--4. IEEE, 2011.
+
+\bibitem{gtsam}
+Frank Dellaert.
+\newblock Factor graphs and gtsam: A hands-on introduction.
+\newblock (GT-RIM-CP\&R-2012-002), Sept 2012.
+
+\end{thebibliography}
