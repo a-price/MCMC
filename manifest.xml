@@ -14,6 +14,7 @@
   <depend package="cv_bridge"/>
   <depend package="image_transport"/>
   <depend package="tf"/>
+  <depend package="rgbd_graph_segmentation" />
 </package>
 
 

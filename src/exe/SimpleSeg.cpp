@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stdio.h>
 
+#include <rgbd_graph_segmentation/rgbd_graph_segmentation.h>
+
 #include <ros/ros.h>
 
 #include <message_filters/subscriber.h>
@@ -224,6 +226,12 @@ void segment(cv::Mat d, cv::Mat c,
 
 	int res = system("mkdir -p ./temp/superPixels/");
 	cv::imwrite("./temp/superPixels/colorf.png", colors);
+
+	//////// New Segmentation!
+	rgbd_graph_segmentation::Segmentation segmentation = rgbd_graph_segmentation::segment(colors, disparities);
+	ROS_INFO("Writing File.");
+	cv::Mat segImg = segmentation.segmentationImage();
+	cv::imwrite("/home/arprice/testSeg.png",segImg);
 
 	// Segmentation setup
 	Graph graph;
